@@ -1,0 +1,25 @@
+cat > .gitignore <<'EOF'
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+venv/
+.env/
+
+# Reports with possible private metadata
+reports/*.txt
+reports/*.json
+reports/*.csv
+
+# Backups
+backups/
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+EOF
