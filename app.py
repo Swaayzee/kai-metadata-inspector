@@ -14,6 +14,8 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMainWindow,
     QMessageBox,
     QPushButton,
@@ -28,12 +30,13 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "Kai Metadata Inspector"
-APP_VERSION = "v0.3 Linux Alpha"
+APP_VERSION = "v0.4 Linux Alpha"
 
 REPORTS_DIR = Path("reports")
 
 MAX_FILE_SIZE_MB_WARNING = 250
 MAX_PREVIEW_FILE_SIZE_MB = 50
+MAX_FOLDER_FILES_WARNING = 300
 EXIFTOOL_TIMEOUT_SECONDS = 30
 
 
@@ -205,6 +208,26 @@ def timezone_status(raw: dict) -> tuple[str, str]:
         "Timezone not found",
         "No timezone offset fields or GPS time fields were found."
     )
+
+
+def find_supported_files(folder_path: Path) -> list[Path]:
+    """
+    Folder scan for v0.4.
+
+    Security/scope:
+    - scans only the selected folder, not subfolders
+    - only lists supported extensions
+    - does not open every file immediately
+    - metadata extraction happens only after user clicks a file
+    """
+
+    files = []
+
+    for item in folder_path.iterdir():
+        if item.is_file() and item.suffix.lower() in SUPPORTED_EXTENSIONS:
+            files.append(item)
+
+    return sorted(files, key=lambda p: p.name.lower())
 
 
 def build_analysis(file_path: Path, raw: dict) -> dict:
@@ -478,11 +501,13 @@ class MainWindow(QMainWindow):
         self.current_report: str | None = None
         self.current_pixmap: QPixmap | None = None
         self.raw_metadata_lines: list[str] = []
+        self.folder_files: list[Path] = []
 
         self.setWindowTitle(f"{APP_NAME} — {APP_VERSION}")
-        self.resize(1250, 780)
+        self.resize(1350, 820)
 
         self.open_button = QPushButton("Open Image / File")
+        self.open_folder_button = QPushButton("Open Folder")
         self.export_button = QPushButton("Export TXT")
         self.export_json_button = QPushButton("Export Raw JSON")
         self.clear_button = QPushButton("Clear")
@@ -502,7 +527,7 @@ class MainWindow(QMainWindow):
         self.preview_label = QLabel("No preview loaded")
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview_label.setWordWrap(True)
-        self.preview_label.setMinimumSize(320, 320)
+        self.preview_label.setMinimumSize(320, 270)
         self.preview_label.setStyleSheet(
             "border: 1px solid #555; border-radius: 8px; padding: 10px;"
         )
@@ -517,7 +542,14 @@ class MainWindow(QMainWindow):
 
         self.left_info = QTextEdit()
         self.left_info.setReadOnly(True)
-        self.left_info.setMaximumHeight(190)
+        self.left_info.setMaximumHeight(165)
+
+        self.folder_label = QLabel("Folder files: none")
+        self.folder_label.setWordWrap(True)
+
+        self.folder_list = QListWidget()
+        self.folder_list.setMinimumHeight(160)
+        self.folder_list.itemClicked.connect(self.load_folder_item)
 
         left_panel = QWidget()
         left_layout = QVBoxLayout()
@@ -525,6 +557,8 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(self.preview_scroll)
         left_layout.addWidget(QLabel("Quick File Info"))
         left_layout.addWidget(self.left_info)
+        left_layout.addWidget(self.folder_label)
+        left_layout.addWidget(self.folder_list)
         left_panel.setLayout(left_layout)
 
         self.tabs = QTabWidget()
@@ -561,10 +595,11 @@ class MainWindow(QMainWindow):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(left_panel)
         splitter.addWidget(right_panel)
-        splitter.setSizes([430, 820])
+        splitter.setSizes([470, 880])
 
         button_layout = QHBoxLayout()
         button_layout.addWidget(self.open_button)
+        button_layout.addWidget(self.open_folder_button)
         button_layout.addWidget(self.export_button)
         button_layout.addWidget(self.export_json_button)
         button_layout.addWidget(self.clear_button)
@@ -586,6 +621,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(container)
 
         self.open_button.clicked.connect(self.open_file)
+        self.open_folder_button.clicked.connect(self.open_folder)
         self.export_button.clicked.connect(self.export_txt)
         self.export_json_button.clicked.connect(self.export_json)
         self.clear_button.clicked.connect(self.clear_data)
@@ -613,8 +649,79 @@ class MainWindow(QMainWindow):
         if not selected_file:
             return
 
-        file_path = Path(selected_file)
+        self.load_file(Path(selected_file))
 
+    def open_folder(self):
+        selected_folder = QFileDialog.getExistingDirectory(
+            self,
+            "Open folder containing images",
+            str(Path.home()),
+        )
+
+        if not selected_folder:
+            return
+
+        folder_path = Path(selected_folder)
+
+        try:
+            files = find_supported_files(folder_path)
+        except Exception as error:
+            QMessageBox.critical(self, "Folder error", str(error))
+            return
+
+        if not files:
+            QMessageBox.information(
+                self,
+                "No supported files",
+                "No supported image/metadata files were found in this folder.",
+            )
+            self.folder_files = []
+            self.folder_list.clear()
+            self.folder_label.setText(f"Folder files: none found in {folder_path}")
+            return
+
+        if len(files) > MAX_FOLDER_FILES_WARNING:
+            reply = QMessageBox.question(
+                self,
+                "Large folder warning",
+                (
+                    f"This folder contains {len(files)} supported files.\n\n"
+                    "v0.4 lists the files but only scans metadata when you click one.\n\n"
+                    "Do you want to continue?"
+                ),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+
+        self.folder_files = files
+        self.folder_list.clear()
+
+        for file_path in files:
+            item = QListWidgetItem(file_path.name)
+            item.setData(Qt.ItemDataRole.UserRole, str(file_path))
+            self.folder_list.addItem(item)
+
+        self.folder_label.setText(
+            f"Folder files: {len(files)} supported file(s) found in {folder_path}"
+        )
+        self.status_label.setText(
+            "Status: Folder loaded. Click a file in the list to inspect metadata."
+        )
+
+        if files:
+            self.load_file(files[0])
+
+    def load_folder_item(self, item: QListWidgetItem):
+        file_path_str = item.data(Qt.ItemDataRole.UserRole)
+
+        if not file_path_str:
+            return
+
+        self.load_file(Path(file_path_str))
+
+    def load_file(self, file_path: Path):
         if file_path.suffix.lower() not in SUPPORTED_EXTENSIONS:
             reply = QMessageBox.question(
                 self,
@@ -855,6 +962,7 @@ class MainWindow(QMainWindow):
         self.current_report = None
         self.current_pixmap = None
         self.raw_metadata_lines = []
+        self.folder_files = []
 
         self.file_label.setText("Selected file: none")
         self.left_info.clear()
@@ -862,6 +970,8 @@ class MainWindow(QMainWindow):
         self.preview_label.setPixmap(QPixmap())
         self.preview_label.setText("No preview loaded")
         self.raw_search.clear()
+        self.folder_list.clear()
+        self.folder_label.setText("Folder files: none")
 
         for text_box in self.tab_widgets.values():
             text_box.clear()
