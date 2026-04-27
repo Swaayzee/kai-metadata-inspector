@@ -106,3 +106,34 @@ Not included yet:
 - Metadata cleaning
 - AI explanation
 - Windows support
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## v0.8 Linux Alpha planned
+
+Goal:
+- Add export all TXT reports from loaded folder
+- Add export all raw JSON metadata from loaded folder
+- Add CSV export for folder summary
+- Keep app offline and read-only
+- Keep original files untouched
+
+Not included yet:
+- Metadata cleaning
+- AI explanation
+- AppImage packaging
+- Windows support
