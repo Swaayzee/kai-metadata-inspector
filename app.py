@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "Kai Metadata Inspector"
-APP_VERSION = "v0.2 Linux Alpha"
+APP_VERSION = "v0.3 Linux Alpha"
 
 REPORTS_DIR = Path("reports")
 
@@ -60,6 +60,8 @@ def safe_run_exiftool(file_path: Path) -> dict:
     - timeout enabled
     - output parsed as JSON
     - original file is never modified
+
+    -c %.8f formats GPS coordinates as decimal numbers where possible.
     """
 
     if not shutil.which("exiftool"):
@@ -80,6 +82,8 @@ def safe_run_exiftool(file_path: Path) -> dict:
         "-G",
         "-a",
         "-s",
+        "-c",
+        "%.8f",
         str(file_path),
     ]
 
@@ -144,11 +148,25 @@ def has_any(metadata: dict, possible_keys: list[str]) -> bool:
     return False
 
 
+def clean_text(value: object, max_length: int = 5000) -> str:
+    """
+    Treat metadata as untrusted text.
+    Keep it plain text and limit very large fields.
+    """
+
+    text = str(value)
+
+    if len(text) > max_length:
+        return text[:max_length] + "\n...[truncated for safe display]"
+
+    return text
+
+
 def format_section(title: str, data: dict) -> str:
     lines = [title, "=" * len(title), ""]
 
     for key, value in data.items():
-        lines.append(f"{key}: {value}")
+        lines.append(f"{key}: {clean_text(value)}")
 
     return "\n".join(lines)
 
@@ -160,11 +178,42 @@ def gps_map_text(latitude: str, longitude: str) -> str:
     return f"https://maps.google.com/?q={latitude},{longitude}"
 
 
+def timezone_status(raw: dict) -> tuple[str, str]:
+    offset_original = get_any(raw, ["EXIF:OffsetTimeOriginal"])
+    offset_digitized = get_any(raw, ["EXIF:OffsetTimeDigitized"])
+    offset_general = get_any(raw, ["EXIF:OffsetTime"])
+
+    gps_date = get_any(raw, ["GPS:GPSDateStamp"])
+    gps_time = get_any(raw, ["GPS:GPSTimeStamp"])
+
+    if offset_original != "Not found":
+        return "Stored timezone offset found", f"OffsetTimeOriginal: {offset_original}"
+
+    if offset_digitized != "Not found":
+        return "Stored timezone offset found", f"OffsetTimeDigitized: {offset_digitized}"
+
+    if offset_general != "Not found":
+        return "Stored timezone offset found", f"OffsetTime: {offset_general}"
+
+    if gps_date != "Not found" or gps_time != "Not found":
+        return (
+            "Timezone not directly stored",
+            "GPS date/time exists and is usually UTC/GPS time. Local timezone may need manual interpretation."
+        )
+
+    return (
+        "Timezone not found",
+        "No timezone offset fields or GPS time fields were found."
+    )
+
+
 def build_analysis(file_path: Path, raw: dict) -> dict:
     file_size_mb = file_path.stat().st_size / (1024 * 1024)
 
     gps_lat = get_any(raw, ["GPS:GPSLatitude", "Composite:GPSLatitude"])
     gps_lon = get_any(raw, ["GPS:GPSLongitude", "Composite:GPSLongitude"])
+
+    tz_status, tz_explanation = timezone_status(raw)
 
     file_info = {
         "File name": file_path.name,
@@ -203,7 +252,8 @@ def build_analysis(file_path: Path, raw: dict) -> dict:
         "Offset time": get_any(raw, ["EXIF:OffsetTime"]),
         "GPS date stamp": get_any(raw, ["GPS:GPSDateStamp"]),
         "GPS time stamp": get_any(raw, ["GPS:GPSTimeStamp"]),
-        "Timezone note": "If offset fields are missing, timezone may not be stored in the file.",
+        "Timezone status": tz_status,
+        "Timezone explanation": tz_explanation,
     }
 
     location_info = {
@@ -240,6 +290,8 @@ def build_analysis(file_path: Path, raw: dict) -> dict:
 
     gps_found = has_any(raw, ["GPS:GPSLatitude", "GPS:GPSLongitude", "Composite:GPSLatitude", "Composite:GPSLongitude"])
     time_found = has_any(raw, ["EXIF:DateTimeOriginal", "EXIF:CreateDate", "QuickTime:CreateDate", "XMP:CreateDate"])
+    timezone_found = has_any(raw, ["EXIF:OffsetTimeOriginal", "EXIF:OffsetTimeDigitized", "EXIF:OffsetTime"])
+    gps_time_found = has_any(raw, ["GPS:GPSDateStamp", "GPS:GPSTimeStamp"])
     device_found = has_any(raw, ["EXIF:Make", "EXIF:Model", "IFD0:Make", "IFD0:Model", "QuickTime:Model"])
     serial_found = has_any(raw, [
         "EXIF:SerialNumber",
@@ -255,11 +307,19 @@ def build_analysis(file_path: Path, raw: dict) -> dict:
 
     if gps_found:
         risk_points += 4
-        reasons.append("GPS coordinates found.")
+        reasons.append("GPS coordinates found. This may reveal where the image was taken.")
 
     if time_found:
         risk_points += 2
-        reasons.append("Capture or creation timestamp found.")
+        reasons.append("Capture or creation timestamp found. This may reveal when the image was taken.")
+
+    if timezone_found:
+        risk_points += 1
+        reasons.append("Timezone offset found. This can make timestamps more precise.")
+
+    if gps_time_found:
+        risk_points += 1
+        reasons.append("GPS timestamp found. This may help reconstruct the exact capture timeline.")
 
     if device_found:
         risk_points += 1
@@ -267,7 +327,7 @@ def build_analysis(file_path: Path, raw: dict) -> dict:
 
     if serial_found:
         risk_points += 3
-        reasons.append("Device serial number found.")
+        reasons.append("Device serial number found. This can be sensitive.")
 
     if owner_found:
         risk_points += 3
@@ -280,17 +340,18 @@ def build_analysis(file_path: Path, raw: dict) -> dict:
     if not reasons:
         reasons.append("No obvious sensitive metadata found. Metadata may also have been stripped.")
 
-    if risk_points >= 8:
+    if risk_points >= 9:
         risk_level = "CRITICAL"
-    elif risk_points >= 5:
+    elif risk_points >= 6:
         risk_level = "HIGH"
-    elif risk_points >= 2:
+    elif risk_points >= 3:
         risk_level = "MEDIUM"
     else:
         risk_level = "LOW"
 
     privacy_info = {
         "Privacy risk": risk_level,
+        "Risk score": f"{risk_points} point(s)",
         "Reasons": "\n- " + "\n- ".join(reasons),
         "Important warning": (
             "Exported reports may contain sensitive information. "
@@ -309,6 +370,13 @@ def build_analysis(file_path: Path, raw: dict) -> dict:
         interesting.append("Timestamp metadata is present.")
     else:
         interesting.append("No obvious original timestamp found.")
+
+    if timezone_found:
+        interesting.append("Timezone offset is stored in the image metadata.")
+    elif gps_time_found:
+        interesting.append("GPS time exists, but local timezone offset was not directly found.")
+    else:
+        interesting.append("No timezone information found.")
 
     if device_found:
         interesting.append("Device make/model metadata is present.")
@@ -333,8 +401,10 @@ def build_analysis(file_path: Path, raw: dict) -> dict:
         "Format": file_info["File type"],
         "Device": f"{device_info['Make']} {device_info['Model']}",
         "Capture time": time_info["Date/time original"],
+        "Timezone": tz_status,
         "GPS": "Found" if gps_found else "Not found",
         "Privacy risk": risk_level,
+        "Risk score": f"{risk_points} point(s)",
         "Interesting findings": "\n- " + "\n- ".join(interesting),
     }
 
@@ -366,8 +436,8 @@ def build_report(file_path: Path, analysis: dict) -> str:
     lines.append("---------------")
     lines.append(
         "This report may contain sensitive information such as GPS coordinates, "
-        "device model, timestamps, serial numbers, owner information or editing history. "
-        "Be careful before sharing it."
+        "device model, timestamps, timezone offsets, serial numbers, owner information "
+        "or editing history. Be careful before sharing it."
     )
     lines.append("")
 
@@ -391,7 +461,7 @@ def build_report(file_path: Path, analysis: dict) -> str:
     lines.append("")
 
     for key in sorted(analysis["raw"].keys()):
-        value = analysis["raw"][key]
+        value = clean_text(analysis["raw"][key])
         lines.append(f"{key}: {value}")
 
     lines.append("")
@@ -414,9 +484,11 @@ class MainWindow(QMainWindow):
 
         self.open_button = QPushButton("Open Image / File")
         self.export_button = QPushButton("Export TXT")
+        self.export_json_button = QPushButton("Export Raw JSON")
         self.clear_button = QPushButton("Clear")
 
         self.export_button.setEnabled(False)
+        self.export_json_button.setEnabled(False)
 
         self.file_label = QLabel("Selected file: none")
         self.file_label.setWordWrap(True)
@@ -445,7 +517,7 @@ class MainWindow(QMainWindow):
 
         self.left_info = QTextEdit()
         self.left_info.setReadOnly(True)
-        self.left_info.setMaximumHeight(170)
+        self.left_info.setMaximumHeight(190)
 
         left_panel = QWidget()
         left_layout = QVBoxLayout()
@@ -494,6 +566,7 @@ class MainWindow(QMainWindow):
         button_layout = QHBoxLayout()
         button_layout.addWidget(self.open_button)
         button_layout.addWidget(self.export_button)
+        button_layout.addWidget(self.export_json_button)
         button_layout.addWidget(self.clear_button)
         button_layout.addStretch()
 
@@ -514,6 +587,7 @@ class MainWindow(QMainWindow):
 
         self.open_button.clicked.connect(self.open_file)
         self.export_button.clicked.connect(self.export_txt)
+        self.export_json_button.clicked.connect(self.export_json)
         self.clear_button.clicked.connect(self.clear_data)
 
         self.show_startup_info()
@@ -586,17 +660,18 @@ class MainWindow(QMainWindow):
 
             self.file_label.setText(f"Selected file: {file_path}")
             self.populate_tabs(analysis)
-            self.update_left_info(file_path, analysis)
+            self.update_left_info(analysis)
             self.load_preview(file_path)
 
             self.export_button.setEnabled(True)
+            self.export_json_button.setEnabled(True)
             self.status_label.setText("Status: Metadata extracted successfully.")
 
         except Exception as error:
             QMessageBox.critical(self, "Error", str(error))
             self.status_label.setText("Status: Error while extracting metadata.")
 
-    def update_left_info(self, file_path: Path, analysis: dict):
+    def update_left_info(self, analysis: dict):
         quick_info = {
             "File name": analysis["file"]["File name"],
             "File type": analysis["file"]["File type"],
@@ -604,8 +679,10 @@ class MainWindow(QMainWindow):
             "Dimensions": f"{analysis['file']['Image width']} x {analysis['file']['Image height']}",
             "Device": analysis["overview"]["Device"],
             "Capture time": analysis["overview"]["Capture time"],
+            "Timezone": analysis["overview"]["Timezone"],
             "GPS": analysis["overview"]["GPS"],
             "Privacy risk": analysis["overview"]["Privacy risk"],
+            "Risk score": analysis["overview"]["Risk score"],
         }
 
         self.left_info.setPlainText(format_section("Quick File Info", quick_info))
@@ -617,6 +694,7 @@ class MainWindow(QMainWindow):
         file_size_mb = file_path.stat().st_size / (1024 * 1024)
 
         if suffix not in PREVIEW_EXTENSIONS:
+            self.preview_label.setPixmap(QPixmap())
             self.preview_label.setText(
                 "Preview unavailable for this format.\n\n"
                 "Metadata extraction still worked.\n\n"
@@ -626,6 +704,7 @@ class MainWindow(QMainWindow):
             return
 
         if file_size_mb > MAX_PREVIEW_FILE_SIZE_MB:
+            self.preview_label.setPixmap(QPixmap())
             self.preview_label.setText(
                 f"Preview skipped because the file is {file_size_mb:.2f} MB.\n\n"
                 "Metadata extraction still worked."
@@ -635,6 +714,7 @@ class MainWindow(QMainWindow):
         pixmap = QPixmap(str(file_path))
 
         if pixmap.isNull():
+            self.preview_label.setPixmap(QPixmap())
             self.preview_label.setText(
                 "Preview could not be loaded.\n\n"
                 "Metadata extraction still worked."
@@ -658,6 +738,7 @@ class MainWindow(QMainWindow):
             Qt.TransformationMode.SmoothTransformation,
         )
 
+        self.preview_label.setText("")
         self.preview_label.setPixmap(scaled)
 
     def resizeEvent(self, event):
@@ -676,7 +757,7 @@ class MainWindow(QMainWindow):
 
         self.raw_metadata_lines = []
         for key in sorted(analysis["raw"].keys()):
-            self.raw_metadata_lines.append(f"{key}: {analysis['raw'][key]}")
+            self.raw_metadata_lines.append(f"{key}: {clean_text(analysis['raw'][key])}")
 
         self.raw_search.clear()
         self.tab_widgets["Raw Metadata"].setPlainText("\n".join(self.raw_metadata_lines))
@@ -725,11 +806,48 @@ class MainWindow(QMainWindow):
                 "Export complete",
                 f"Report saved to:\n{save_path}",
             )
-            self.status_label.setText(f"Status: Report exported to {save_path}")
+            self.status_label.setText(f"Status: TXT report exported to {save_path}")
 
         except Exception as error:
             QMessageBox.critical(self, "Export error", str(error))
-            self.status_label.setText("Status: Error while exporting report.")
+            self.status_label.setText("Status: Error while exporting TXT report.")
+
+    def export_json(self):
+        if not self.current_file or not self.current_analysis:
+            QMessageBox.warning(self, "Nothing to export", "Open a file first.")
+            return
+
+        REPORTS_DIR.mkdir(exist_ok=True)
+
+        default_name = f"{self.current_file.stem}_raw_metadata.json"
+        default_path = REPORTS_DIR / default_name
+
+        save_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export raw JSON metadata",
+            str(default_path),
+            "JSON files (*.json);;All files (*)",
+        )
+
+        if not save_path:
+            return
+
+        try:
+            raw_metadata = self.current_analysis["raw"]
+            Path(save_path).write_text(
+                json.dumps(raw_metadata, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            QMessageBox.information(
+                self,
+                "Export complete",
+                f"Raw JSON saved to:\n{save_path}",
+            )
+            self.status_label.setText(f"Status: Raw JSON exported to {save_path}")
+
+        except Exception as error:
+            QMessageBox.critical(self, "Export error", str(error))
+            self.status_label.setText("Status: Error while exporting raw JSON.")
 
     def clear_data(self):
         self.current_file = None
@@ -741,6 +859,7 @@ class MainWindow(QMainWindow):
         self.file_label.setText("Selected file: none")
         self.left_info.clear()
         self.preview_label.clear()
+        self.preview_label.setPixmap(QPixmap())
         self.preview_label.setText("No preview loaded")
         self.raw_search.clear()
 
@@ -748,6 +867,7 @@ class MainWindow(QMainWindow):
             text_box.clear()
 
         self.export_button.setEnabled(False)
+        self.export_json_button.setEnabled(False)
         self.status_label.setText("Status: Cleared.")
 
 
