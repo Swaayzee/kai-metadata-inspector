@@ -30,13 +30,14 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "Kai Metadata Inspector"
-APP_VERSION = "v0.4 Linux Alpha"
+APP_VERSION = "v0.5 Linux Alpha"
 
 REPORTS_DIR = Path("reports")
 
 MAX_FILE_SIZE_MB_WARNING = 250
 MAX_PREVIEW_FILE_SIZE_MB = 50
 MAX_FOLDER_FILES_WARNING = 300
+MAX_FOLDER_SUMMARY_WARNING = 100
 EXIFTOOL_TIMEOUT_SECONDS = 30
 
 
@@ -212,13 +213,13 @@ def timezone_status(raw: dict) -> tuple[str, str]:
 
 def find_supported_files(folder_path: Path) -> list[Path]:
     """
-    Folder scan for v0.4.
+    Folder scan for v0.5.
 
     Security/scope:
     - scans only the selected folder, not subfolders
     - only lists supported extensions
-    - does not open every file immediately
     - metadata extraction happens only after user clicks a file
+      or manually clicks Scan Folder Summary
     """
 
     files = []
@@ -442,6 +443,18 @@ def build_analysis(file_path: Path, raw: dict) -> dict:
         "privacy": privacy_info,
         "interesting": interesting,
         "raw": raw,
+        "flags": {
+            "gps_found": gps_found,
+            "time_found": time_found,
+            "timezone_found": timezone_found,
+            "gps_time_found": gps_time_found,
+            "device_found": device_found,
+            "serial_found": serial_found,
+            "owner_found": owner_found,
+            "software_found": software_found,
+            "risk_points": risk_points,
+            "risk_level": risk_level,
+        }
     }
 
 
@@ -492,6 +505,187 @@ def build_report(file_path: Path, analysis: dict) -> str:
     return "\n".join(lines)
 
 
+def build_folder_summary(folder_path: Path, files: list[Path]) -> tuple[dict, str]:
+    """
+    Scans metadata for each supported file in the selected folder.
+
+    Security/scope:
+    - still read-only
+    - no internet
+    - no file modification
+    - each file uses safe ExifTool subprocess call
+    """
+
+    summary = {
+        "folder_path": str(folder_path),
+        "generated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "total_supported_files": len(files),
+        "scanned_ok": 0,
+        "scan_errors": 0,
+        "gps_count": 0,
+        "timestamp_count": 0,
+        "timezone_count": 0,
+        "gps_time_count": 0,
+        "device_count": 0,
+        "serial_count": 0,
+        "owner_count": 0,
+        "software_count": 0,
+        "low_risk": 0,
+        "medium_risk": 0,
+        "high_risk": 0,
+        "critical_risk": 0,
+        "device_models": {},
+        "file_rows": [],
+        "errors": [],
+    }
+
+    for index, file_path in enumerate(files, start=1):
+        try:
+            raw = safe_run_exiftool(file_path)
+            analysis = build_analysis(file_path, raw)
+            flags = analysis["flags"]
+
+            summary["scanned_ok"] += 1
+
+            if flags["gps_found"]:
+                summary["gps_count"] += 1
+
+            if flags["time_found"]:
+                summary["timestamp_count"] += 1
+
+            if flags["timezone_found"]:
+                summary["timezone_count"] += 1
+
+            if flags["gps_time_found"]:
+                summary["gps_time_count"] += 1
+
+            if flags["device_found"]:
+                summary["device_count"] += 1
+
+            if flags["serial_found"]:
+                summary["serial_count"] += 1
+
+            if flags["owner_found"]:
+                summary["owner_count"] += 1
+
+            if flags["software_found"]:
+                summary["software_count"] += 1
+
+            risk_level = flags["risk_level"]
+
+            if risk_level == "LOW":
+                summary["low_risk"] += 1
+            elif risk_level == "MEDIUM":
+                summary["medium_risk"] += 1
+            elif risk_level == "HIGH":
+                summary["high_risk"] += 1
+            elif risk_level == "CRITICAL":
+                summary["critical_risk"] += 1
+
+            device_make = analysis["device"]["Make"]
+            device_model = analysis["device"]["Model"]
+
+            if device_make != "Not found" or device_model != "Not found":
+                device_name = f"{device_make} {device_model}".strip()
+                summary["device_models"][device_name] = summary["device_models"].get(device_name, 0) + 1
+
+            summary["file_rows"].append({
+                "file": file_path.name,
+                "risk": risk_level,
+                "risk_points": flags["risk_points"],
+                "gps": "Yes" if flags["gps_found"] else "No",
+                "timestamp": "Yes" if flags["time_found"] else "No",
+                "timezone": "Yes" if flags["timezone_found"] else "No",
+                "device": f"{device_make} {device_model}".strip(),
+                "software": analysis["software"]["Software"],
+            })
+
+        except Exception as error:
+            summary["scan_errors"] += 1
+            summary["errors"].append({
+                "file": file_path.name,
+                "error": str(error),
+            })
+
+    report = build_folder_summary_report(summary)
+    return summary, report
+
+
+def build_folder_summary_report(summary: dict) -> str:
+    lines = []
+
+    lines.append("KAI METADATA INSPECTOR — FOLDER SUMMARY REPORT")
+    lines.append("==============================================")
+    lines.append("")
+    lines.append(f"App version: {APP_VERSION}")
+    lines.append(f"Generated: {summary['generated']}")
+    lines.append(f"Folder: {summary['folder_path']}")
+    lines.append("")
+    lines.append("SHARING WARNING")
+    lines.append("---------------")
+    lines.append(
+        "This folder summary may reveal sensitive patterns, including how many files contain "
+        "GPS coordinates, timestamps, device models, serial numbers, owner information or editing history."
+    )
+    lines.append("")
+
+    lines.append("Summary Counts")
+    lines.append("--------------")
+    lines.append(f"Total supported files: {summary['total_supported_files']}")
+    lines.append(f"Successfully scanned: {summary['scanned_ok']}")
+    lines.append(f"Scan errors: {summary['scan_errors']}")
+    lines.append(f"Files with GPS: {summary['gps_count']}")
+    lines.append(f"Files with timestamps: {summary['timestamp_count']}")
+    lines.append(f"Files with timezone offset: {summary['timezone_count']}")
+    lines.append(f"Files with GPS time: {summary['gps_time_count']}")
+    lines.append(f"Files with device make/model: {summary['device_count']}")
+    lines.append(f"Files with serial number: {summary['serial_count']}")
+    lines.append(f"Files with owner/creator/copyright info: {summary['owner_count']}")
+    lines.append(f"Files with software/editing info: {summary['software_count']}")
+    lines.append("")
+
+    lines.append("Risk Breakdown")
+    lines.append("--------------")
+    lines.append(f"LOW: {summary['low_risk']}")
+    lines.append(f"MEDIUM: {summary['medium_risk']}")
+    lines.append(f"HIGH: {summary['high_risk']}")
+    lines.append(f"CRITICAL: {summary['critical_risk']}")
+    lines.append("")
+
+    lines.append("Device Models")
+    lines.append("-------------")
+    if summary["device_models"]:
+        for device, count in sorted(summary["device_models"].items()):
+            lines.append(f"{device}: {count}")
+    else:
+        lines.append("No device models found.")
+    lines.append("")
+
+    lines.append("Per-File Overview")
+    lines.append("-----------------")
+    if summary["file_rows"]:
+        for row in summary["file_rows"]:
+            lines.append(
+                f"{row['file']} | Risk: {row['risk']} ({row['risk_points']} pts) | "
+                f"GPS: {row['gps']} | Timestamp: {row['timestamp']} | "
+                f"Timezone: {row['timezone']} | Device: {row['device']} | "
+                f"Software: {row['software']}"
+            )
+    else:
+        lines.append("No files scanned successfully.")
+    lines.append("")
+
+    if summary["errors"]:
+        lines.append("Scan Errors")
+        lines.append("-----------")
+        for error in summary["errors"]:
+            lines.append(f"{error['file']}: {error['error']}")
+        lines.append("")
+
+    lines.append("End of folder summary report.")
+    return "\n".join(lines)
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -501,19 +695,27 @@ class MainWindow(QMainWindow):
         self.current_report: str | None = None
         self.current_pixmap: QPixmap | None = None
         self.raw_metadata_lines: list[str] = []
+
+        self.current_folder: Path | None = None
         self.folder_files: list[Path] = []
+        self.folder_summary: dict | None = None
+        self.folder_summary_report: str | None = None
 
         self.setWindowTitle(f"{APP_NAME} — {APP_VERSION}")
-        self.resize(1350, 820)
+        self.resize(1400, 850)
 
         self.open_button = QPushButton("Open Image / File")
         self.open_folder_button = QPushButton("Open Folder")
+        self.scan_summary_button = QPushButton("Scan Folder Summary")
         self.export_button = QPushButton("Export TXT")
         self.export_json_button = QPushButton("Export Raw JSON")
+        self.export_summary_button = QPushButton("Export Folder Summary")
         self.clear_button = QPushButton("Clear")
 
+        self.scan_summary_button.setEnabled(False)
         self.export_button.setEnabled(False)
         self.export_json_button.setEnabled(False)
+        self.export_summary_button.setEnabled(False)
 
         self.file_label = QLabel("Selected file: none")
         self.file_label.setWordWrap(True)
@@ -527,7 +729,7 @@ class MainWindow(QMainWindow):
         self.preview_label = QLabel("No preview loaded")
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview_label.setWordWrap(True)
-        self.preview_label.setMinimumSize(320, 270)
+        self.preview_label.setMinimumSize(320, 260)
         self.preview_label.setStyleSheet(
             "border: 1px solid #555; border-radius: 8px; padding: 10px;"
         )
@@ -542,7 +744,7 @@ class MainWindow(QMainWindow):
 
         self.left_info = QTextEdit()
         self.left_info.setReadOnly(True)
-        self.left_info.setMaximumHeight(165)
+        self.left_info.setMaximumHeight(160)
 
         self.folder_label = QLabel("Folder files: none")
         self.folder_label.setWordWrap(True)
@@ -574,6 +776,7 @@ class MainWindow(QMainWindow):
             "Software",
             "Privacy",
             "Raw Metadata",
+            "Folder Summary",
         ]:
             text_box = QTextEdit()
             text_box.setReadOnly(True)
@@ -595,13 +798,15 @@ class MainWindow(QMainWindow):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(left_panel)
         splitter.addWidget(right_panel)
-        splitter.setSizes([470, 880])
+        splitter.setSizes([480, 920])
 
         button_layout = QHBoxLayout()
         button_layout.addWidget(self.open_button)
         button_layout.addWidget(self.open_folder_button)
+        button_layout.addWidget(self.scan_summary_button)
         button_layout.addWidget(self.export_button)
         button_layout.addWidget(self.export_json_button)
+        button_layout.addWidget(self.export_summary_button)
         button_layout.addWidget(self.clear_button)
         button_layout.addStretch()
 
@@ -622,8 +827,10 @@ class MainWindow(QMainWindow):
 
         self.open_button.clicked.connect(self.open_file)
         self.open_folder_button.clicked.connect(self.open_folder)
+        self.scan_summary_button.clicked.connect(self.scan_folder_summary)
         self.export_button.clicked.connect(self.export_txt)
         self.export_json_button.clicked.connect(self.export_json)
+        self.export_summary_button.clicked.connect(self.export_folder_summary)
         self.clear_button.clicked.connect(self.clear_data)
 
         self.show_startup_info()
@@ -675,9 +882,11 @@ class MainWindow(QMainWindow):
                 "No supported files",
                 "No supported image/metadata files were found in this folder.",
             )
+            self.current_folder = folder_path
             self.folder_files = []
             self.folder_list.clear()
             self.folder_label.setText(f"Folder files: none found in {folder_path}")
+            self.scan_summary_button.setEnabled(False)
             return
 
         if len(files) > MAX_FOLDER_FILES_WARNING:
@@ -686,7 +895,8 @@ class MainWindow(QMainWindow):
                 "Large folder warning",
                 (
                     f"This folder contains {len(files)} supported files.\n\n"
-                    "v0.4 lists the files but only scans metadata when you click one.\n\n"
+                    "v0.5 lists the files but only scans metadata when you click one "
+                    "or when you manually click Scan Folder Summary.\n\n"
                     "Do you want to continue?"
                 ),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
@@ -695,7 +905,12 @@ class MainWindow(QMainWindow):
             if reply != QMessageBox.StandardButton.Yes:
                 return
 
+        self.current_folder = folder_path
         self.folder_files = files
+        self.folder_summary = None
+        self.folder_summary_report = None
+        self.export_summary_button.setEnabled(False)
+
         self.folder_list.clear()
 
         for file_path in files:
@@ -706,12 +921,59 @@ class MainWindow(QMainWindow):
         self.folder_label.setText(
             f"Folder files: {len(files)} supported file(s) found in {folder_path}"
         )
+        self.scan_summary_button.setEnabled(True)
+        self.tab_widgets["Folder Summary"].setPlainText(
+            "Folder loaded.\n\nClick 'Scan Folder Summary' to analyse all supported files in this folder."
+        )
         self.status_label.setText(
-            "Status: Folder loaded. Click a file in the list to inspect metadata."
+            "Status: Folder loaded. Click a file to inspect it or scan folder summary."
         )
 
         if files:
             self.load_file(files[0])
+
+    def scan_folder_summary(self):
+        if not self.current_folder or not self.folder_files:
+            QMessageBox.warning(self, "No folder loaded", "Open a folder first.")
+            return
+
+        if len(self.folder_files) > MAX_FOLDER_SUMMARY_WARNING:
+            reply = QMessageBox.question(
+                self,
+                "Folder summary warning",
+                (
+                    f"This will scan metadata from {len(self.folder_files)} file(s).\n\n"
+                    "This may take a while and the app may pause during scanning.\n\n"
+                    "Do you want to continue?"
+                ),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+
+        try:
+            self.status_label.setText("Status: Scanning folder summary...")
+            self.tab_widgets["Folder Summary"].setPlainText("Scanning folder summary. Please wait...")
+            QApplication.processEvents()
+
+            summary, report = build_folder_summary(self.current_folder, self.folder_files)
+
+            self.folder_summary = summary
+            self.folder_summary_report = report
+
+            self.tab_widgets["Folder Summary"].setPlainText(report)
+            self.tabs.setCurrentWidget(self.tab_widgets["Folder Summary"])
+            self.export_summary_button.setEnabled(True)
+
+            self.status_label.setText(
+                f"Status: Folder summary complete. "
+                f"Scanned {summary['scanned_ok']} file(s), {summary['scan_errors']} error(s)."
+            )
+
+        except Exception as error:
+            QMessageBox.critical(self, "Folder summary error", str(error))
+            self.status_label.setText("Status: Error while scanning folder summary.")
 
     def load_folder_item(self, item: QListWidgetItem):
         file_path_str = item.data(Qt.ItemDataRole.UserRole)
@@ -956,13 +1218,51 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Export error", str(error))
             self.status_label.setText("Status: Error while exporting raw JSON.")
 
+    def export_folder_summary(self):
+        if not self.folder_summary_report or not self.current_folder:
+            QMessageBox.warning(self, "Nothing to export", "Scan folder summary first.")
+            return
+
+        REPORTS_DIR.mkdir(exist_ok=True)
+
+        safe_folder_name = self.current_folder.name or "folder"
+        default_name = f"{safe_folder_name}_folder_summary_report.txt"
+        default_path = REPORTS_DIR / default_name
+
+        save_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export folder summary report",
+            str(default_path),
+            "Text files (*.txt);;All files (*)",
+        )
+
+        if not save_path:
+            return
+
+        try:
+            Path(save_path).write_text(self.folder_summary_report, encoding="utf-8")
+            QMessageBox.information(
+                self,
+                "Export complete",
+                f"Folder summary saved to:\n{save_path}",
+            )
+            self.status_label.setText(f"Status: Folder summary exported to {save_path}")
+
+        except Exception as error:
+            QMessageBox.critical(self, "Export error", str(error))
+            self.status_label.setText("Status: Error while exporting folder summary.")
+
     def clear_data(self):
         self.current_file = None
         self.current_analysis = None
         self.current_report = None
         self.current_pixmap = None
         self.raw_metadata_lines = []
+
+        self.current_folder = None
         self.folder_files = []
+        self.folder_summary = None
+        self.folder_summary_report = None
 
         self.file_label.setText("Selected file: none")
         self.left_info.clear()
@@ -978,6 +1278,9 @@ class MainWindow(QMainWindow):
 
         self.export_button.setEnabled(False)
         self.export_json_button.setEnabled(False)
+        self.export_summary_button.setEnabled(False)
+        self.scan_summary_button.setEnabled(False)
+
         self.status_label.setText("Status: Cleared.")
 
 
