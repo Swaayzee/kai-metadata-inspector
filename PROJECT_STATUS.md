@@ -59,3 +59,50 @@ Planned:
 - Better privacy-risk explanations
 - Safer exported report structure
 - Prepare code for future folder scanning
+
+
+## v0.4 Linux Alpha planned
+
+Goal:
+- Add folder scanning
+- Show supported files in a selectable list
+- Load metadata when user clicks a file
+- Keep export TXT and raw JSON for selected file
+- Keep app offline and read-only
+
+Not included yet:
+- Export all reports
+- Folder summary report
+- CSV export
+- Metadata cleaning
+- AI explanation
+
+
+
+Open Folder
+Folder file list
+Click file from list to inspect it
+Single image/file mode still works
+Export TXT for selected file
+Export Raw JSON for selected file
+Same offline/read-only security rules
+
+
+
+## v0.5 Linux Alpha planned
+
+Goal:
+- Add folder summary analysis
+- Count files with GPS metadata
+- Count files with timestamps
+- Count files with camera/phone model
+- Count high-risk files
+- Show summary in app
+- Export folder summary TXT
+
+Not included yet:
+- Export all individual reports
+- CSV export
+- Metadata cleaning
+- AI explanation
+- Windows support
