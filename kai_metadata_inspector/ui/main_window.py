@@ -48,6 +48,7 @@ from kai_metadata_inspector.core.report_builder import build_report
 from kai_metadata_inspector.core.folder_summary import (
     find_supported_files,
     build_folder_summary,
+    build_folder_summary_csv,
 )
 
 
@@ -77,12 +78,14 @@ class MainWindow(QMainWindow):
         self.export_button = QPushButton("Export TXT")
         self.export_json_button = QPushButton("Export Raw JSON")
         self.export_summary_button = QPushButton("Export Folder Summary")
+        self.export_summary_csv_button = QPushButton("Export Summary CSV")
         self.clear_button = QPushButton("Clear")
 
         self.scan_summary_button.setEnabled(False)
         self.export_button.setEnabled(False)
         self.export_json_button.setEnabled(False)
         self.export_summary_button.setEnabled(False)
+        self.export_summary_csv_button.setEnabled(False)
 
         self.file_label = QLabel("Selected file: none")
         self.file_label.setWordWrap(True)
@@ -174,6 +177,7 @@ class MainWindow(QMainWindow):
         button_layout.addWidget(self.export_button)
         button_layout.addWidget(self.export_json_button)
         button_layout.addWidget(self.export_summary_button)
+        button_layout.addWidget(self.export_summary_csv_button)
         button_layout.addWidget(self.clear_button)
         button_layout.addStretch()
 
@@ -198,6 +202,7 @@ class MainWindow(QMainWindow):
         self.export_button.clicked.connect(self.export_txt)
         self.export_json_button.clicked.connect(self.export_json)
         self.export_summary_button.clicked.connect(self.export_folder_summary)
+        self.export_summary_csv_button.clicked.connect(self.export_folder_summary_csv)
         self.clear_button.clicked.connect(self.clear_data)
 
         self.show_startup_info()
@@ -276,6 +281,7 @@ class MainWindow(QMainWindow):
         self.folder_summary = None
         self.folder_summary_report = None
         self.export_summary_button.setEnabled(False)
+        self.export_summary_csv_button.setEnabled(False)
 
         self.folder_list.clear()
 
@@ -335,6 +341,7 @@ class MainWindow(QMainWindow):
             self.tab_widgets["Folder Summary"].setPlainText(report)
             self.tabs.setCurrentWidget(self.tab_widgets["Folder Summary"])
             self.export_summary_button.setEnabled(True)
+            self.export_summary_csv_button.setEnabled(True)
 
             self.status_label.setText(
                 f"Status: Folder summary complete. "
@@ -622,6 +629,41 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Export error", str(error))
             self.status_label.setText("Status: Error while exporting folder summary.")
 
+    def export_folder_summary_csv(self):
+        if not self.folder_summary or not self.current_folder:
+            QMessageBox.warning(self, "Nothing to export", "Scan folder summary first.")
+            return
+
+        REPORTS_DIR.mkdir(exist_ok=True)
+
+        safe_folder_name = self.current_folder.name or "folder"
+        default_name = f"{safe_folder_name}_folder_summary.csv"
+        default_path = REPORTS_DIR / default_name
+
+        save_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export folder summary CSV",
+            str(default_path),
+            "CSV files (*.csv);;All files (*)",
+        )
+
+        if not save_path:
+            return
+
+        try:
+            csv_text = build_folder_summary_csv(self.folder_summary)
+            Path(save_path).write_text(csv_text, encoding="utf-8")
+            QMessageBox.information(
+                self,
+                "Export complete",
+                f"Folder summary CSV saved to:\n{save_path}",
+            )
+            self.status_label.setText(f"Status: Folder summary CSV exported to {save_path}")
+
+        except Exception as error:
+            QMessageBox.critical(self, "CSV export error", str(error))
+            self.status_label.setText("Status: Error while exporting folder summary CSV.")
+
     def clear_data(self):
         self.current_file = None
         self.current_analysis = None
@@ -649,6 +691,7 @@ class MainWindow(QMainWindow):
         self.export_button.setEnabled(False)
         self.export_json_button.setEnabled(False)
         self.export_summary_button.setEnabled(False)
+        self.export_summary_csv_button.setEnabled(False)
         self.scan_summary_button.setEnabled(False)
 
         self.status_label.setText("Status: Cleared.")

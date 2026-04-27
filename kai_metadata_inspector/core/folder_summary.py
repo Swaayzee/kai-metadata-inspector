@@ -211,3 +211,46 @@ def build_folder_summary_report(summary: dict) -> str:
 
     lines.append("End of folder summary report.")
     return "\n".join(lines)
+
+def build_folder_summary_csv(summary: dict) -> str:
+    """
+    Builds CSV text from folder summary.
+
+    Safe behaviour:
+    - text export only
+    - no original file modification
+    - no internet access
+    """
+
+    import csv
+    from io import StringIO
+
+    output = StringIO()
+
+    fieldnames = [
+        "file",
+        "risk",
+        "risk_points",
+        "gps",
+        "timestamp",
+        "timezone",
+        "device",
+        "software",
+    ]
+
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+
+    for row in summary.get("file_rows", []):
+        writer.writerow({
+            "file": row.get("file", ""),
+            "risk": row.get("risk", ""),
+            "risk_points": row.get("risk_points", ""),
+            "gps": row.get("gps", ""),
+            "timestamp": row.get("timestamp", ""),
+            "timezone": row.get("timezone", ""),
+            "device": row.get("device", ""),
+            "software": row.get("software", ""),
+        })
+
+    return output.getvalue()

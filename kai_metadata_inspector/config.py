@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 APP_NAME = "Kai Metadata Inspector"
-APP_VERSION = "v0.7 Linux Alpha"
+APP_VERSION = "v0.8 Linux Alpha"
 
 REPORTS_DIR = Path("reports")
 
