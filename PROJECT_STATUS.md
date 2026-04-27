@@ -37,3 +37,25 @@ Planned improvements:
 - Improve GPS display
 - Improve timezone notes
 - Improve TXT report formatting
+
+
+-----------------------------------------------
+
+
+## v0.2 Linux Alpha completed
+
+Added:
+- Image preview panel
+- Improved left/right layout
+- Raw metadata search
+- Better quick file information panel
+
+## Next version
+v0.3 Linux Alpha
+
+Planned:
+- Better GPS detection
+- Better timezone detection
+- Better privacy-risk explanations
+- Safer exported report structure
+- Prepare code for future folder scanning
