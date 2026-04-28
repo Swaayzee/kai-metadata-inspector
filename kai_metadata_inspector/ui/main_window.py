@@ -102,6 +102,7 @@ class MainWindow(QMainWindow):
         self.export_summary_button = QPushButton("Export Folder Summary")
         self.export_summary_csv_button = QPushButton("Export Summary CSV")
         self.export_all_txt_button = QPushButton("Export All TXT")
+        self.export_all_json_button = QPushButton("Export All JSON")
         self.clear_button = QPushButton("Clear")
 
         self.scan_summary_button.setEnabled(False)
@@ -110,6 +111,7 @@ class MainWindow(QMainWindow):
         self.export_summary_button.setEnabled(False)
         self.export_summary_csv_button.setEnabled(False)
         self.export_all_txt_button.setEnabled(False)
+        self.export_all_json_button.setEnabled(False)
 
         self.file_label = QLabel("Selected file: none")
         self.file_label.setWordWrap(True)
@@ -203,6 +205,7 @@ class MainWindow(QMainWindow):
         button_layout.addWidget(self.export_summary_button)
         button_layout.addWidget(self.export_summary_csv_button)
         button_layout.addWidget(self.export_all_txt_button)
+        button_layout.addWidget(self.export_all_json_button)
         button_layout.addWidget(self.clear_button)
         button_layout.addStretch()
 
@@ -229,6 +232,7 @@ class MainWindow(QMainWindow):
         self.export_summary_button.clicked.connect(self.export_folder_summary)
         self.export_summary_csv_button.clicked.connect(self.export_folder_summary_csv)
         self.export_all_txt_button.clicked.connect(self.export_all_txt_reports)
+        self.export_all_json_button.clicked.connect(self.export_all_json_reports)
         self.clear_button.clicked.connect(self.clear_data)
 
         self.show_startup_info()
@@ -285,6 +289,7 @@ class MainWindow(QMainWindow):
             self.folder_label.setText(f"Folder files: none found in {folder_path}")
             self.scan_summary_button.setEnabled(False)
             self.export_all_txt_button.setEnabled(False)
+            self.export_all_json_button.setEnabled(False)
             return
 
         if len(files) > MAX_FOLDER_FILES_WARNING:
@@ -310,6 +315,7 @@ class MainWindow(QMainWindow):
         self.export_summary_button.setEnabled(False)
         self.export_summary_csv_button.setEnabled(False)
         self.export_all_txt_button.setEnabled(False)
+        self.export_all_json_button.setEnabled(False)
 
         self.folder_list.clear()
 
@@ -323,6 +329,7 @@ class MainWindow(QMainWindow):
         )
         self.scan_summary_button.setEnabled(True)
         self.export_all_txt_button.setEnabled(True)
+        self.export_all_json_button.setEnabled(True)
         self.tab_widgets["Folder Summary"].setPlainText(
             "Folder loaded.\n\nClick 'Scan Folder Summary' to analyse all supported files in this folder."
         )
@@ -772,6 +779,86 @@ class MainWindow(QMainWindow):
             f"Status: Exported {exported} TXT report(s), {len(errors)} error(s)."
         )
 
+    def export_all_json_reports(self):
+        if not self.current_folder or not self.folder_files:
+            QMessageBox.warning(self, "No folder loaded", "Open a folder first.")
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Export all raw JSON reports",
+            (
+                f"This will scan and export raw JSON metadata from {len(self.folder_files)} file(s).\n\n"
+                "The app may pause during export.\n\n"
+                "Original files will not be modified.\n\n"
+                "Do you want to continue?"
+            ),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        selected_folder = QFileDialog.getExistingDirectory(
+            self,
+            "Choose output folder for all raw JSON reports",
+            str(REPORTS_DIR.resolve() if REPORTS_DIR.exists() else Path.home()),
+        )
+
+        if not selected_folder:
+            return
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        export_root = Path(selected_folder) / f"kai_metadata_json_export_{timestamp}"
+        json_dir = export_root / "json_reports"
+        json_dir.mkdir(parents=True, exist_ok=True)
+
+        errors = []
+        exported = 0
+
+        self.status_label.setText("Status: Exporting all raw JSON reports...")
+        QApplication.processEvents()
+
+        for index, file_path in enumerate(self.folder_files, start=1):
+            try:
+                self.status_label.setText(
+                    f"Status: Exporting JSON {index}/{len(self.folder_files)} — {file_path.name}"
+                )
+                QApplication.processEvents()
+
+                raw = safe_run_exiftool(file_path)
+
+                output_name = f"{safe_output_name(file_path.stem)}_raw_metadata.json"
+                output_path = json_dir / output_name
+                output_path.write_text(
+                    json.dumps(raw, indent=2, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+
+                exported += 1
+
+            except Exception as error:
+                errors.append(f"{file_path.name}: {error}")
+
+        if errors:
+            error_log = export_root / "json_export_errors.txt"
+            error_log.write_text("\n".join(errors), encoding="utf-8")
+
+        QMessageBox.information(
+            self,
+            "Export complete",
+            (
+                f"Raw JSON export finished.\n\n"
+                f"Exported: {exported}\n"
+                f"Errors: {len(errors)}\n\n"
+                f"Output folder:\n{export_root}"
+            ),
+        )
+
+        self.status_label.setText(
+            f"Status: Exported {exported} raw JSON file(s), {len(errors)} error(s)."
+        )
+
     def clear_data(self):
         self.current_file = None
         self.current_analysis = None
@@ -801,6 +888,7 @@ class MainWindow(QMainWindow):
         self.export_summary_button.setEnabled(False)
         self.export_summary_csv_button.setEnabled(False)
         self.export_all_txt_button.setEnabled(False)
+        self.export_all_json_button.setEnabled(False)
         self.scan_summary_button.setEnabled(False)
 
         self.status_label.setText("Status: Cleared.")
