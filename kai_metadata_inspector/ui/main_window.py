@@ -46,6 +46,7 @@ from kai_metadata_inspector.core.analyzer import (
     clean_text,
 )
 from kai_metadata_inspector.core.report_builder import build_report
+from kai_metadata_inspector.core.cleaner import clean_metadata_copy
 from kai_metadata_inspector.core.folder_summary import (
     find_supported_files,
     build_folder_summary,
@@ -99,6 +100,7 @@ class MainWindow(QMainWindow):
         self.scan_summary_button = QPushButton("Scan Folder Summary")
         self.export_button = QPushButton("Export TXT")
         self.export_json_button = QPushButton("Export Raw JSON")
+        self.clean_copy_button = QPushButton("Create Clean Copy")
         self.export_summary_button = QPushButton("Export Folder Summary")
         self.export_summary_csv_button = QPushButton("Export Summary CSV")
         self.export_all_txt_button = QPushButton("Export All TXT")
@@ -108,6 +110,7 @@ class MainWindow(QMainWindow):
         self.scan_summary_button.setEnabled(False)
         self.export_button.setEnabled(False)
         self.export_json_button.setEnabled(False)
+        self.clean_copy_button.setEnabled(False)
         self.export_summary_button.setEnabled(False)
         self.export_summary_csv_button.setEnabled(False)
         self.export_all_txt_button.setEnabled(False)
@@ -206,6 +209,7 @@ class MainWindow(QMainWindow):
         export_button_layout = QHBoxLayout()
         export_button_layout.addWidget(self.export_button)
         export_button_layout.addWidget(self.export_json_button)
+        export_button_layout.addWidget(self.clean_copy_button)
         export_button_layout.addWidget(self.export_summary_button)
         export_button_layout.addWidget(self.export_summary_csv_button)
         export_button_layout.addWidget(self.export_all_txt_button)
@@ -235,6 +239,7 @@ class MainWindow(QMainWindow):
         self.scan_summary_button.clicked.connect(self.scan_folder_summary)
         self.export_button.clicked.connect(self.export_txt)
         self.export_json_button.clicked.connect(self.export_json)
+        self.clean_copy_button.clicked.connect(self.create_clean_copy)
         self.export_summary_button.clicked.connect(self.export_folder_summary)
         self.export_summary_csv_button.clicked.connect(self.export_folder_summary_csv)
         self.export_all_txt_button.clicked.connect(self.export_all_txt_reports)
@@ -453,6 +458,7 @@ class MainWindow(QMainWindow):
 
             self.export_button.setEnabled(True)
             self.export_json_button.setEnabled(True)
+            self.clean_copy_button.setEnabled(True)
             self.status_label.setText("Status: Metadata extracted successfully.")
 
         except Exception as error:
@@ -865,6 +871,70 @@ class MainWindow(QMainWindow):
             f"Status: Exported {exported} raw JSON file(s), {len(errors)} error(s)."
         )
 
+    def create_clean_copy(self):
+        if not self.current_file:
+            QMessageBox.warning(self, "No file selected", "Open a file first.")
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Create cleaned copy",
+            (
+                "This will create a new copy with metadata removed.\n\n"
+                "The original file will NOT be modified.\n\n"
+                "A cleaning report will also be created.\n\n"
+                "Continue?"
+            ),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        default_name = f"{self.current_file.stem}_cleaned{self.current_file.suffix}"
+        default_path = REPORTS_DIR / "cleaned" / default_name
+
+        save_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save cleaned copy",
+            str(default_path),
+            "All files (*)",
+        )
+
+        if not save_path:
+            return
+
+        output_path = Path(save_path)
+
+        try:
+            self.status_label.setText("Status: Creating cleaned copy...")
+            QApplication.processEvents()
+
+            result = clean_metadata_copy(self.current_file, output_path)
+
+            QMessageBox.information(
+                self,
+                "Cleaned copy created",
+                (
+                    "Cleaned copy created successfully.\n\n"
+                    f"Original file:\n{result['source_path']}\n\n"
+                    f"Cleaned copy:\n{result['output_path']}\n\n"
+                    f"Cleaning report:\n{result['report_path']}\n\n"
+                    f"Tags before: {result['before_tag_count']}\n"
+                    f"Tags after: {result['after_tag_count']}\n"
+                    f"Removed tags: {result['removed_tag_count']}\n\n"
+                    "Recommended: open the cleaned copy in this app and review remaining metadata."
+                ),
+            )
+
+            self.status_label.setText(
+                f"Status: Cleaned copy created at {result['output_path']}"
+            )
+
+        except Exception as error:
+            QMessageBox.critical(self, "Cleaning error", str(error))
+            self.status_label.setText("Status: Error while creating cleaned copy.")
+
     def clear_data(self):
         self.current_file = None
         self.current_analysis = None
@@ -891,6 +961,7 @@ class MainWindow(QMainWindow):
 
         self.export_button.setEnabled(False)
         self.export_json_button.setEnabled(False)
+        self.clean_copy_button.setEnabled(False)
         self.export_summary_button.setEnabled(False)
         self.export_summary_csv_button.setEnabled(False)
         self.export_all_txt_button.setEnabled(False)
