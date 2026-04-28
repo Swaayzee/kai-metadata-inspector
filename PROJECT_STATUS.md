@@ -111,7 +111,28 @@ Not included yet:
 
 
 
+## v1.0 Linux Alpha preparation
 
+Current goal:
+- Prepare project for GitHub/public release
+- Add release checklist
+- Add testing guide
+- Add privacy notes
+- Confirm all core features work
+- Confirm security rules are still followed
+
+Current stable features:
+- Single image metadata inspection
+- Image preview for common formats
+- Raw metadata search
+- TXT export
+- Raw JSON export
+- Folder scanning
+- Folder summary report
+- Folder summary CSV export
+- Export all TXT reports
+- Export all raw JSON reports
+- Offline/read-only behaviour
 
 
 
