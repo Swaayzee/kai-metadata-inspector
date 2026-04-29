@@ -449,6 +449,9 @@ def clean_metadata_from_image(input_path: Path) -> Dict[str, Any]:
         "original_unchanged": original_unchanged,
     }
 
+from kai_metadata_inspector.core.exiftool_runner import get_exiftool_version
+from kai_metadata_inspector.core.folder_summary import find_supported_files, build_folder_summary
+
 
 class MainWindow(QMainWindow):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -456,6 +459,11 @@ class MainWindow(QMainWindow):
 
         self.current_path: Optional[Path] = None
         self.current_metadata: Optional[Dict[str, Any]] = None
+
+        self.current_folder: Optional[Path] = None
+        self.folder_files: List[Path] = []
+        self.folder_index: int = 0
+        self.folder_summary_report: Optional[str] = None
 
         self.setWindowTitle(APP_NAME)
         self.resize(1120, 760)
@@ -500,6 +508,36 @@ class MainWindow(QMainWindow):
 
         button_row.addStretch(1)
         root_layout.addLayout(button_row)
+
+        folder_tools_label = QLabel("Folder tools")
+        folder_tools_label.setObjectName("SectionLabel")
+        root_layout.addWidget(folder_tools_label)
+
+        folder_button_row = QHBoxLayout()
+
+        self.open_folder_button = QPushButton("Open folder")
+        self.previous_folder_file_button = QPushButton("Previous file")
+        self.next_folder_file_button = QPushButton("Next file")
+        self.scan_folder_button = QPushButton("Scan folder summary")
+        self.export_folder_summary_button = QPushButton("Export folder summary")
+
+        self.previous_folder_file_button.setEnabled(False)
+        self.next_folder_file_button.setEnabled(False)
+        self.scan_folder_button.setEnabled(False)
+        self.export_folder_summary_button.setEnabled(False)
+
+        for button in [
+            self.open_folder_button,
+            self.previous_folder_file_button,
+            self.next_folder_file_button,
+            self.scan_folder_button,
+            self.export_folder_summary_button,
+        ]:
+            button.setMinimumHeight(34)
+            folder_button_row.addWidget(button)
+
+        folder_button_row.addStretch(1)
+        root_layout.addLayout(folder_button_row)
 
         self.path_label = QLabel("No file selected")
         self.path_label.setObjectName("PathLabel")
@@ -601,6 +639,12 @@ class MainWindow(QMainWindow):
         self.export_button.clicked.connect(self.export_report)
         self.clean_button.clicked.connect(self.create_clean_copy)
         self.outputs_button.clicked.connect(self.open_outputs_folder)
+
+        self.open_folder_button.clicked.connect(self.open_folder_dialog)
+        self.previous_folder_file_button.clicked.connect(self.load_previous_folder_file)
+        self.next_folder_file_button.clicked.connect(self.load_next_folder_file)
+        self.scan_folder_button.clicked.connect(self.scan_folder_summary)
+        self.export_folder_summary_button.clicked.connect(self.export_folder_summary)
         self.clear_button.clicked.connect(self.clear_view)
 
     def _apply_dark_style(self) -> None:
@@ -873,6 +917,180 @@ class MainWindow(QMainWindow):
         else:
             self.status_label.setText(f"Status: Cleaned copy created at {result['output_path']}")
 
+    def open_folder_dialog(self) -> None:
+        folder_path = QFileDialog.getExistingDirectory(
+            self,
+            "Open folder containing images",
+            str(Path.home()),
+        )
+
+        if not folder_path:
+            return
+
+        folder = Path(folder_path)
+
+        try:
+            files = find_supported_files(folder)
+        except Exception as error:
+            QMessageBox.critical(self, "Folder error", f"Could not read folder:\n{error}")
+            self.status_label.setText("Status: Error while opening folder.")
+            return
+
+        self.current_folder = folder
+        self.folder_files = files
+        self.folder_index = 0
+        self.folder_summary_report = None
+
+        self.export_folder_summary_button.setEnabled(False)
+        self.previous_folder_file_button.setEnabled(False)
+        self.next_folder_file_button.setEnabled(False)
+
+        if not files:
+            self.scan_folder_button.setEnabled(False)
+            self.previous_folder_file_button.setEnabled(False)
+            self.next_folder_file_button.setEnabled(False)
+            self.report_box.setPlainText(
+                f"Folder loaded:\n{folder}\n\nNo supported files were found."
+            )
+            self.status_label.setText("Status: Folder loaded, but no supported files found.")
+            return
+
+        self.scan_folder_button.setEnabled(True)
+        self.previous_folder_file_button.setEnabled(False)
+        self.next_folder_file_button.setEnabled(len(files) > 1)
+
+        file_list_preview = "\n".join(f"- {file.name}" for file in files[:50])
+
+        if len(files) > 50:
+            file_list_preview += f"\n...and {len(files) - 50} more file(s)."
+
+        self.report_box.setPlainText(
+            "Folder loaded\n"
+            "=============\n\n"
+            f"Folder: {folder}\n"
+            f"Supported files found: {len(files)}\n\n"
+            "Files:\n"
+            f"{file_list_preview}\n\n"
+            "Click 'Scan folder summary' to analyse the folder."
+        )
+
+        self.status_label.setText(
+            f"Status: Folder loaded. {len(files)} supported file(s) found. Loading first file..."
+        )
+
+        # Automatically inspect the first file in the folder.
+        self.load_file(files[0])
+        self.status_label.setText(
+            f"Status: Folder loaded. Showing 1/{len(files)} — {files[0].name}"
+        )
+
+    def load_folder_file_at_index(self, index: int) -> None:
+        if not self.folder_files:
+            QMessageBox.information(self, "No folder loaded", "Open a folder first.")
+            return
+
+        if index < 0 or index >= len(self.folder_files):
+            return
+
+        self.folder_index = index
+        file_path = self.folder_files[self.folder_index]
+
+        self.previous_folder_file_button.setEnabled(self.folder_index > 0)
+        self.next_folder_file_button.setEnabled(self.folder_index < len(self.folder_files) - 1)
+
+        self.load_file(file_path)
+        self.status_label.setText(
+            f"Status: Showing folder file {self.folder_index + 1}/{len(self.folder_files)} — {file_path.name}"
+        )
+
+    def load_previous_folder_file(self) -> None:
+        self.load_folder_file_at_index(self.folder_index - 1)
+
+    def load_next_folder_file(self) -> None:
+        self.load_folder_file_at_index(self.folder_index + 1)
+
+    def scan_folder_summary(self) -> None:
+        if not self.current_folder or not self.folder_files:
+            QMessageBox.information(self, "No folder loaded", "Open a folder first.")
+            return
+
+        if len(self.folder_files) > 100:
+            reply = QMessageBox.question(
+                self,
+                "Large folder warning",
+                (
+                    f"This will scan {len(self.folder_files)} file(s).\n\n"
+                    "The app may pause while scanning.\n\n"
+                    "Continue?"
+                ),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+
+            if reply != QMessageBox.StandardButton.Yes:
+                self.status_label.setText("Status: Folder summary cancelled.")
+                return
+
+        try:
+            self.status_label.setText("Status: Scanning folder summary...")
+            self.report_box.setPlainText("Scanning folder summary. Please wait...")
+            QApplication.processEvents()
+
+            _summary, report = build_folder_summary(
+                self.current_folder,
+                self.folder_files,
+                get_exiftool_version(),
+            )
+
+            self.folder_summary_report = report
+            self.report_box.setPlainText(report)
+            self.export_folder_summary_button.setEnabled(True)
+
+            self.status_label.setText(
+                f"Status: Folder summary complete. {len(self.folder_files)} file(s) checked."
+            )
+
+        except Exception as error:
+            QMessageBox.critical(self, "Folder summary error", f"Could not scan folder:\n{error}")
+            self.status_label.setText("Status: Error while scanning folder summary.")
+
+    def export_folder_summary(self) -> None:
+        if not self.folder_summary_report or not self.current_folder:
+            QMessageBox.information(
+                self,
+                "No folder summary",
+                "Scan a folder summary first.",
+            )
+            return
+
+        default_path = outputs_dir() / f"{self.current_folder.name}_folder_summary_{now_stamp()}.txt"
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save folder summary",
+            str(default_path),
+            "Text files (*.txt);;All files (*.*)",
+        )
+
+        if not file_path:
+            return
+
+        destination = Path(file_path)
+
+        try:
+            destination.write_text(self.folder_summary_report, encoding="utf-8")
+        except Exception as error:
+            QMessageBox.critical(self, "Export error", f"Could not save folder summary:\n{error}")
+            self.status_label.setText("Status: Error while exporting folder summary.")
+            return
+
+        QMessageBox.information(
+            self,
+            "Folder summary exported",
+            f"Folder summary saved to:\n{destination}",
+        )
+        self.status_label.setText(f"Status: Folder summary exported to {destination}")
+
     def open_outputs_folder(self) -> None:
         folder = outputs_dir()
 
@@ -883,6 +1101,23 @@ class MainWindow(QMainWindow):
     def clear_view(self) -> None:
         self.current_path = None
         self.current_metadata = None
+
+        self.current_folder = None
+        self.folder_files = []
+        self.folder_index = 0
+        self.folder_summary_report = None
+
+        if hasattr(self, "previous_folder_file_button"):
+            self.previous_folder_file_button.setEnabled(False)
+
+        if hasattr(self, "next_folder_file_button"):
+            self.next_folder_file_button.setEnabled(False)
+
+        if hasattr(self, "scan_folder_button"):
+            self.scan_folder_button.setEnabled(False)
+
+        if hasattr(self, "export_folder_summary_button"):
+            self.export_folder_summary_button.setEnabled(False)
 
         self.path_label.setText("No file selected")
 
