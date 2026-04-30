@@ -465,6 +465,8 @@ except Exception:
 
 from PySide6.QtGui import QAction
 
+from PySide6.QtWidgets import QListWidget, QListWidgetItem
+
 class MainWindow(QMainWindow):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__()
@@ -710,6 +712,16 @@ class MainWindow(QMainWindow):
         quick_layout.addWidget(self.summary_gps, 3, 1)
 
         left_layout.addWidget(quick_group, stretch=1)
+
+        folder_files_group = QGroupBox("Folder files")
+        folder_files_layout = QVBoxLayout(folder_files_group)
+
+        self.folder_file_list = QListWidget()
+        self.folder_file_list.setMinimumHeight(120)
+        self.folder_file_list.itemClicked.connect(self.load_selected_folder_file)
+
+        folder_files_layout.addWidget(self.folder_file_list)
+        left_layout.addWidget(folder_files_group, stretch=1)
 
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
@@ -1098,6 +1110,9 @@ class MainWindow(QMainWindow):
         self.folder_index = 0
         self.folder_summary_report = None
 
+        if hasattr(self, "folder_file_list"):
+            self.folder_file_list.clear()
+
         self.export_folder_summary_button.setEnabled(False)
         self.export_all_reports_button.setEnabled(False)
         self.export_all_json_button.setEnabled(False)
@@ -1121,6 +1136,17 @@ class MainWindow(QMainWindow):
         self.export_all_json_button.setEnabled(True)
         self.previous_folder_file_button.setEnabled(False)
         self.next_folder_file_button.setEnabled(len(files) > 1)
+
+        if hasattr(self, "folder_file_list"):
+            self.folder_file_list.clear()
+
+            for index, file_path in enumerate(files):
+                item = QListWidgetItem(f"{index + 1}. {file_path.name}")
+                item.setData(Qt.ItemDataRole.UserRole, index)
+                self.folder_file_list.addItem(item)
+
+            if files:
+                self.folder_file_list.setCurrentRow(0)
 
         file_list_preview = "\n".join(f"- {file.name}" for file in files[:50])
 
@@ -1147,6 +1173,12 @@ class MainWindow(QMainWindow):
             f"Status: Folder loaded. Showing 1/{len(files)} — {files[0].name}"
         )
 
+    def load_selected_folder_file(self, item: Any) -> None:
+        index = item.data(Qt.ItemDataRole.UserRole)
+
+        if isinstance(index, int):
+            self.load_folder_file_at_index(index)
+
     def load_folder_file_at_index(self, index: int) -> None:
         if not self.folder_files:
             QMessageBox.information(self, "No folder loaded", "Open a folder first.")
@@ -1160,6 +1192,11 @@ class MainWindow(QMainWindow):
 
         self.previous_folder_file_button.setEnabled(self.folder_index > 0)
         self.next_folder_file_button.setEnabled(self.folder_index < len(self.folder_files) - 1)
+
+        if hasattr(self, "folder_file_list"):
+            self.folder_file_list.blockSignals(True)
+            self.folder_file_list.setCurrentRow(self.folder_index)
+            self.folder_file_list.blockSignals(False)
 
         self.load_file(file_path)
         self.status_label.setText(
@@ -1437,6 +1474,9 @@ class MainWindow(QMainWindow):
         self.folder_files = []
         self.folder_index = 0
         self.folder_summary_report = None
+
+        if hasattr(self, "folder_file_list"):
+            self.folder_file_list.clear()
 
         if hasattr(self, "previous_folder_file_button"):
             self.previous_folder_file_button.setEnabled(False)
