@@ -467,6 +467,7 @@ from PySide6.QtGui import QAction
 
 from PySide6.QtWidgets import QListWidget, QListWidgetItem
 
+
 class MainWindow(QMainWindow):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__()
@@ -486,6 +487,7 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._build_menu()
         self._apply_dark_style()
+
 
         self.status_label.setText("Status: Ready. Open or drag an image file to inspect metadata.")
 
@@ -761,6 +763,10 @@ class MainWindow(QMainWindow):
         self.status_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
         root_layout.addWidget(self.status_label)
+
+
+
+
 
         self.open_button.clicked.connect(self.open_file_dialog)
         self.inspect_button.clicked.connect(self.inspect_current_file)
@@ -1086,6 +1092,34 @@ class MainWindow(QMainWindow):
         else:
             self.status_label.setText(f"Status: Cleaned copy created at {result['output_path']}")
 
+    def start_progress(self, maximum: int, text: str) -> None:
+        """
+        Status-only progress helper.
+
+        Uses the status label for progress feedback.
+        """
+
+        self._progress_max = max(1, maximum)
+        self._progress_current = 0
+        self.status_label.setText(text)
+        QApplication.processEvents()
+
+    def update_progress(self, value: int, text: str) -> None:
+        self._progress_current = value
+        maximum = getattr(self, "_progress_max", 1)
+        percent = int((value / maximum) * 100) if maximum else 0
+        self.status_label.setText(f"{text} ({percent}%)")
+        QApplication.processEvents()
+
+    def finish_progress(self, text: str) -> None:
+        self._progress_current = getattr(self, "_progress_max", 1)
+        self.status_label.setText(text)
+        QApplication.processEvents()
+
+    def hide_progress(self) -> None:
+        self._progress_current = 0
+        QApplication.processEvents()
+
     def open_folder_dialog(self) -> None:
         folder_path = QFileDialog.getExistingDirectory(
             self,
@@ -1321,15 +1355,17 @@ class MainWindow(QMainWindow):
         errors: List[str] = []
         used_names: Dict[str, int] = {}
 
-        self.status_label.setText("Status: Exporting folder reports...")
-        QApplication.processEvents()
+        self.start_progress(
+            len(self.folder_files),
+            "Status: Exporting folder reports..."
+        )
 
         for index, file_path in enumerate(self.folder_files, start=1):
             try:
-                self.status_label.setText(
+                self.update_progress(
+                    index,
                     f"Status: Exporting report {index}/{len(self.folder_files)} — {file_path.name}"
                 )
-                QApplication.processEvents()
 
                 metadata = read_metadata(file_path)
                 report = report_text(metadata)
@@ -1370,7 +1406,7 @@ class MainWindow(QMainWindow):
             ),
         )
 
-        self.status_label.setText(
+        self.finish_progress(
             f"Status: Exported {exported} folder report(s), {len(errors)} error(s)."
         )
 
@@ -1404,15 +1440,17 @@ class MainWindow(QMainWindow):
         errors: List[str] = []
         used_names: Dict[str, int] = {}
 
-        self.status_label.setText("Status: Exporting folder JSON metadata...")
-        QApplication.processEvents()
+        self.start_progress(
+            len(self.folder_files),
+            "Status: Exporting folder JSON metadata..."
+        )
 
         for index, file_path in enumerate(self.folder_files, start=1):
             try:
-                self.status_label.setText(
+                self.update_progress(
+                    index,
                     f"Status: Exporting JSON {index}/{len(self.folder_files)} — {file_path.name}"
                 )
-                QApplication.processEvents()
 
                 metadata = read_metadata(file_path)
 
@@ -1455,7 +1493,7 @@ class MainWindow(QMainWindow):
             ),
         )
 
-        self.status_label.setText(
+        self.finish_progress(
             f"Status: Exported {exported} JSON file(s), {len(errors)} error(s)."
         )
 
@@ -1467,6 +1505,9 @@ class MainWindow(QMainWindow):
         self.status_label.setText(f"Status: Opened outputs folder: {folder}")
 
     def clear_view(self) -> None:
+        if hasattr(self, "progress_bar"):
+            self.hide_progress()
+
         self.current_path = None
         self.current_metadata = None
 
