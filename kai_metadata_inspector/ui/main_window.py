@@ -463,6 +463,8 @@ try:
 except Exception:
     HEIC_PREVIEW_AVAILABLE = False
 
+from PySide6.QtGui import QAction
+
 class MainWindow(QMainWindow):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__()
@@ -480,9 +482,107 @@ class MainWindow(QMainWindow):
         self.setAcceptDrops(True)
 
         self._build_ui()
+        self._build_menu()
         self._apply_dark_style()
 
         self.status_label.setText("Status: Ready. Open or drag an image file to inspect metadata.")
+
+    def _build_menu(self) -> None:
+        help_menu = self.menuBar().addMenu("Help")
+
+        about_action = QAction("About Kai Metadata Inspector", self)
+        privacy_action = QAction("Privacy and safety notes", self)
+        formats_action = QAction("Supported formats", self)
+        cleaning_action = QAction("Cleaning mode notes", self)
+
+        about_action.triggered.connect(self.show_about_dialog)
+        privacy_action.triggered.connect(self.show_privacy_dialog)
+        formats_action.triggered.connect(self.show_supported_formats_dialog)
+        cleaning_action.triggered.connect(self.show_cleaning_notes_dialog)
+
+        help_menu.addAction(about_action)
+        help_menu.addAction(privacy_action)
+        help_menu.addAction(formats_action)
+        help_menu.addAction(cleaning_action)
+
+    def show_about_dialog(self) -> None:
+        QMessageBox.information(
+            self,
+            "About Kai Metadata Inspector",
+            (
+                "Kai Metadata Inspector\n\n"
+                "A privacy-focused image metadata inspection tool for Linux.\n\n"
+                "Main features:\n"
+                "- Inspect image metadata\n"
+                "- Preview common image formats\n"
+                "- HEIC/HEIF preview support when available\n"
+                "- Search and read metadata in a clean table\n"
+                "- Export reports\n"
+                "- Scan folders\n"
+                "- Create cleaned copies without modifying originals\n\n"
+                "Design goal:\n"
+                "Help users understand what their images reveal before sharing them."
+            ),
+        )
+
+    def show_privacy_dialog(self) -> None:
+        QMessageBox.warning(
+            self,
+            "Privacy and safety notes",
+            (
+                "Metadata can reveal sensitive information.\n\n"
+                "Images may contain:\n"
+                "- GPS coordinates\n"
+                "- Date and time\n"
+                "- Camera or phone model\n"
+                "- Software/editing history\n"
+                "- Device serial numbers\n"
+                "- Owner or copyright information\n\n"
+                "This app is designed to be offline-first and read-only for inspection.\n\n"
+                "Exported TXT/JSON/CSV reports may also contain sensitive information. "
+                "Review reports before sharing them."
+            ),
+        )
+
+    def show_supported_formats_dialog(self) -> None:
+        QMessageBox.information(
+            self,
+            "Supported formats",
+            (
+                "Metadata extraction is powered mainly by ExifTool.\n\n"
+                "Common target formats:\n"
+                "- JPG / JPEG\n"
+                "- PNG\n"
+                "- WEBP\n"
+                "- HEIC / HEIF\n"
+                "- TIFF\n"
+                "- BMP\n"
+                "- GIF\n"
+                "- AVIF\n"
+                "- DNG and RAW camera files where supported by ExifTool\n"
+                "- XMP sidecar files\n\n"
+                "Preview support depends on installed image libraries.\n"
+                "Some files may extract metadata correctly even if preview is unavailable."
+            ),
+        )
+
+    def show_cleaning_notes_dialog(self) -> None:
+        QMessageBox.warning(
+            self,
+            "Cleaning mode notes",
+            (
+                "Cleaning mode creates a NEW cleaned copy.\n\n"
+                "Safety rules:\n"
+                "- The original file should not be modified\n"
+                "- A new cleaned copy is created\n"
+                "- A cleaning report is generated\n"
+                "- SHA256 checks are used to confirm the original stayed unchanged\n\n"
+                "Important limitation:\n"
+                "No metadata cleaner can guarantee that every hidden or proprietary field "
+                "has been removed from every file format.\n\n"
+                "Always open and inspect the cleaned copy before sharing."
+            ),
+        )
 
     def _build_ui(self) -> None:
         central = QWidget(self)
