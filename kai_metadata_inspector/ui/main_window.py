@@ -456,6 +456,13 @@ from kai_metadata_inspector.core.folder_summary import find_supported_files, bui
 from io import BytesIO
 from PIL import Image, ImageOps
 
+try:
+    from pillow_heif import register_heif_opener
+    register_heif_opener()
+    HEIC_PREVIEW_AVAILABLE = True
+except Exception:
+    HEIC_PREVIEW_AVAILABLE = False
+
 class MainWindow(QMainWindow):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__()
