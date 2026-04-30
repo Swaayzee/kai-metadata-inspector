@@ -631,12 +631,14 @@ class MainWindow(QMainWindow):
         self.scan_folder_button = QPushButton("Scan folder summary")
         self.export_folder_summary_button = QPushButton("Export folder summary")
         self.export_all_reports_button = QPushButton("Export all reports")
+        self.export_all_json_button = QPushButton("Export all JSON")
 
         self.previous_folder_file_button.setEnabled(False)
         self.next_folder_file_button.setEnabled(False)
         self.scan_folder_button.setEnabled(False)
         self.export_folder_summary_button.setEnabled(False)
         self.export_all_reports_button.setEnabled(False)
+        self.export_all_json_button.setEnabled(False)
 
         for button in [
             self.open_folder_button,
@@ -645,6 +647,7 @@ class MainWindow(QMainWindow):
             self.scan_folder_button,
             self.export_folder_summary_button,
             self.export_all_reports_button,
+            self.export_all_json_button,
         ]:
             button.setMinimumHeight(34)
             folder_button_row.addWidget(button)
@@ -759,6 +762,7 @@ class MainWindow(QMainWindow):
         self.scan_folder_button.clicked.connect(self.scan_folder_summary)
         self.export_folder_summary_button.clicked.connect(self.export_folder_summary)
         self.export_all_reports_button.clicked.connect(self.export_all_reports)
+        self.export_all_json_button.clicked.connect(self.export_all_json)
         self.clear_button.clicked.connect(self.clear_view)
 
     def _apply_dark_style(self) -> None:
@@ -1096,6 +1100,7 @@ class MainWindow(QMainWindow):
 
         self.export_folder_summary_button.setEnabled(False)
         self.export_all_reports_button.setEnabled(False)
+        self.export_all_json_button.setEnabled(False)
         self.previous_folder_file_button.setEnabled(False)
         self.next_folder_file_button.setEnabled(False)
 
@@ -1104,6 +1109,7 @@ class MainWindow(QMainWindow):
             self.previous_folder_file_button.setEnabled(False)
             self.next_folder_file_button.setEnabled(False)
             self.export_all_reports_button.setEnabled(False)
+            self.export_all_json_button.setEnabled(False)
             self.report_box.setPlainText(
                 f"Folder loaded:\n{folder}\n\nNo supported files were found."
             )
@@ -1112,6 +1118,7 @@ class MainWindow(QMainWindow):
 
         self.scan_folder_button.setEnabled(True)
         self.export_all_reports_button.setEnabled(True)
+        self.export_all_json_button.setEnabled(True)
         self.previous_folder_file_button.setEnabled(False)
         self.next_folder_file_button.setEnabled(len(files) > 1)
 
@@ -1330,6 +1337,91 @@ class MainWindow(QMainWindow):
             f"Status: Exported {exported} folder report(s), {len(errors)} error(s)."
         )
 
+    def export_all_json(self) -> None:
+        if not self.current_folder or not self.folder_files:
+            QMessageBox.information(self, "No folder loaded", "Open a folder first.")
+            return
+
+        confirm_reply = QMessageBox.question(
+            self,
+            "Export all JSON?",
+            (
+                f"This will inspect and export raw JSON metadata for {len(self.folder_files)} file(s).\n\n"
+                "Original files will NOT be modified.\n\n"
+                "The app may pause during export.\n\n"
+                "Continue?"
+            ),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+
+        if confirm_reply != QMessageBox.StandardButton.Yes:
+            self.status_label.setText("Status: Export all JSON cancelled.")
+            return
+
+        export_root = outputs_dir() / f"folder_json_{now_stamp()}"
+        json_dir = export_root / "json_metadata"
+        json_dir.mkdir(parents=True, exist_ok=True)
+
+        exported = 0
+        errors: List[str] = []
+        used_names: Dict[str, int] = {}
+
+        self.status_label.setText("Status: Exporting folder JSON metadata...")
+        QApplication.processEvents()
+
+        for index, file_path in enumerate(self.folder_files, start=1):
+            try:
+                self.status_label.setText(
+                    f"Status: Exporting JSON {index}/{len(self.folder_files)} — {file_path.name}"
+                )
+                QApplication.processEvents()
+
+                metadata = read_metadata(file_path)
+
+                safe_stem = "".join(
+                    char if char.isalnum() or char in "._-" else "_"
+                    for char in file_path.stem
+                ).strip("_") or "file"
+
+                duplicate_number = used_names.get(safe_stem, 0)
+                used_names[safe_stem] = duplicate_number + 1
+
+                if duplicate_number:
+                    output_name = f"{safe_stem}_{duplicate_number + 1}_metadata.json"
+                else:
+                    output_name = f"{safe_stem}_metadata.json"
+
+                output_path = json_dir / output_name
+                output_path.write_text(
+                    json.dumps(metadata, indent=2, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+
+                exported += 1
+
+            except Exception as error:
+                errors.append(f"{file_path.name}: {error}")
+
+        if errors:
+            error_log = export_root / "json_export_errors.txt"
+            error_log.write_text("\n".join(errors), encoding="utf-8")
+
+        QMessageBox.information(
+            self,
+            "Export complete",
+            (
+                f"Folder JSON export finished.\n\n"
+                f"Exported JSON files: {exported}\n"
+                f"Errors: {len(errors)}\n\n"
+                f"Output folder:\n{export_root}"
+            ),
+        )
+
+        self.status_label.setText(
+            f"Status: Exported {exported} JSON file(s), {len(errors)} error(s)."
+        )
+
     def open_outputs_folder(self) -> None:
         folder = outputs_dir()
 
@@ -1360,6 +1452,9 @@ class MainWindow(QMainWindow):
 
         if hasattr(self, "export_all_reports_button"):
             self.export_all_reports_button.setEnabled(False)
+
+        if hasattr(self, "export_all_json_button"):
+            self.export_all_json_button.setEnabled(False)
 
         self.path_label.setText("No file selected")
 
