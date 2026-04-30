@@ -453,6 +453,9 @@ from kai_metadata_inspector.core.exiftool_runner import get_exiftool_version
 from kai_metadata_inspector.core.folder_summary import find_supported_files, build_folder_summary
 
 
+from io import BytesIO
+from PIL import Image, ImageOps
+
 class MainWindow(QMainWindow):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__()
@@ -740,23 +743,62 @@ class MainWindow(QMainWindow):
         self.inspect_current_file()
 
     def _update_preview(self, path: Path) -> None:
-        pixmap = QPixmap(str(path))
+        """
+        Load image preview.
 
-        if pixmap.isNull():
-            self.preview_label.setText("Preview unavailable for this file type")
-            self.preview_label.setPixmap(QPixmap())
-            return
+        Uses Pillow ImageOps.exif_transpose so phone photos with EXIF orientation
+        display correctly without modifying the original file.
+        """
 
-        target_size = self.preview_label.size()
+        self.preview_label.setPixmap(QPixmap())
 
-        scaled = pixmap.scaled(
-            target_size,
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
-        )
+        try:
+            with Image.open(path) as image:
+                image = ImageOps.exif_transpose(image)
 
-        self.preview_label.setPixmap(scaled)
-        self.preview_label.setText("")
+                # Convert unusual modes into something Qt can preview reliably.
+                if image.mode not in ("RGB", "RGBA"):
+                    image = image.convert("RGB")
+
+                buffer = BytesIO()
+                image.save(buffer, format="PNG")
+                image_bytes = buffer.getvalue()
+
+            pixmap = QPixmap()
+            loaded = pixmap.loadFromData(image_bytes, "PNG")
+
+            if not loaded or pixmap.isNull():
+                self.preview_label.setText("Preview unavailable for this file type")
+                return
+
+            target_size = self.preview_label.size()
+            scaled = pixmap.scaled(
+                target_size,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+
+            self.preview_label.setText("")
+            self.preview_label.setPixmap(scaled)
+
+        except Exception:
+            # Fallback to Qt's normal loader if Pillow cannot read the file.
+            pixmap = QPixmap(str(path))
+
+            if pixmap.isNull():
+                self.preview_label.setText("Preview unavailable for this file type")
+                self.preview_label.setPixmap(QPixmap())
+                return
+
+            target_size = self.preview_label.size()
+            scaled = pixmap.scaled(
+                target_size,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+
+            self.preview_label.setText("")
+            self.preview_label.setPixmap(scaled)
 
     def resizeEvent(self, event: Any) -> None:
         super().resizeEvent(event)
