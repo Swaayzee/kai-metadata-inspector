@@ -630,11 +630,13 @@ class MainWindow(QMainWindow):
         self.next_folder_file_button = QPushButton("Next file")
         self.scan_folder_button = QPushButton("Scan folder summary")
         self.export_folder_summary_button = QPushButton("Export folder summary")
+        self.export_all_reports_button = QPushButton("Export all reports")
 
         self.previous_folder_file_button.setEnabled(False)
         self.next_folder_file_button.setEnabled(False)
         self.scan_folder_button.setEnabled(False)
         self.export_folder_summary_button.setEnabled(False)
+        self.export_all_reports_button.setEnabled(False)
 
         for button in [
             self.open_folder_button,
@@ -642,6 +644,7 @@ class MainWindow(QMainWindow):
             self.next_folder_file_button,
             self.scan_folder_button,
             self.export_folder_summary_button,
+            self.export_all_reports_button,
         ]:
             button.setMinimumHeight(34)
             folder_button_row.addWidget(button)
@@ -755,6 +758,7 @@ class MainWindow(QMainWindow):
         self.next_folder_file_button.clicked.connect(self.load_next_folder_file)
         self.scan_folder_button.clicked.connect(self.scan_folder_summary)
         self.export_folder_summary_button.clicked.connect(self.export_folder_summary)
+        self.export_all_reports_button.clicked.connect(self.export_all_reports)
         self.clear_button.clicked.connect(self.clear_view)
 
     def _apply_dark_style(self) -> None:
@@ -1091,6 +1095,7 @@ class MainWindow(QMainWindow):
         self.folder_summary_report = None
 
         self.export_folder_summary_button.setEnabled(False)
+        self.export_all_reports_button.setEnabled(False)
         self.previous_folder_file_button.setEnabled(False)
         self.next_folder_file_button.setEnabled(False)
 
@@ -1098,6 +1103,7 @@ class MainWindow(QMainWindow):
             self.scan_folder_button.setEnabled(False)
             self.previous_folder_file_button.setEnabled(False)
             self.next_folder_file_button.setEnabled(False)
+            self.export_all_reports_button.setEnabled(False)
             self.report_box.setPlainText(
                 f"Folder loaded:\n{folder}\n\nNo supported files were found."
             )
@@ -1105,6 +1111,7 @@ class MainWindow(QMainWindow):
             return
 
         self.scan_folder_button.setEnabled(True)
+        self.export_all_reports_button.setEnabled(True)
         self.previous_folder_file_button.setEnabled(False)
         self.next_folder_file_button.setEnabled(len(files) > 1)
 
@@ -1240,6 +1247,89 @@ class MainWindow(QMainWindow):
         )
         self.status_label.setText(f"Status: Folder summary exported to {destination}")
 
+    def export_all_reports(self) -> None:
+        if not self.current_folder or not self.folder_files:
+            QMessageBox.information(self, "No folder loaded", "Open a folder first.")
+            return
+
+        confirm_reply = QMessageBox.question(
+            self,
+            "Export all reports?",
+            (
+                f"This will inspect and export TXT reports for {len(self.folder_files)} file(s).\n\n"
+                "Original files will NOT be modified.\n\n"
+                "The app may pause during export.\n\n"
+                "Continue?"
+            ),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+
+        if confirm_reply != QMessageBox.StandardButton.Yes:
+            self.status_label.setText("Status: Export all reports cancelled.")
+            return
+
+        export_root = outputs_dir() / f"folder_reports_{now_stamp()}"
+        reports_dir = export_root / "txt_reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+
+        exported = 0
+        errors: List[str] = []
+        used_names: Dict[str, int] = {}
+
+        self.status_label.setText("Status: Exporting folder reports...")
+        QApplication.processEvents()
+
+        for index, file_path in enumerate(self.folder_files, start=1):
+            try:
+                self.status_label.setText(
+                    f"Status: Exporting report {index}/{len(self.folder_files)} — {file_path.name}"
+                )
+                QApplication.processEvents()
+
+                metadata = read_metadata(file_path)
+                report = report_text(metadata)
+
+                safe_stem = "".join(
+                    char if char.isalnum() or char in "._-" else "_"
+                    for char in file_path.stem
+                ).strip("_") or "file"
+
+                duplicate_number = used_names.get(safe_stem, 0)
+                used_names[safe_stem] = duplicate_number + 1
+
+                if duplicate_number:
+                    output_name = f"{safe_stem}_{duplicate_number + 1}_metadata_report.txt"
+                else:
+                    output_name = f"{safe_stem}_metadata_report.txt"
+
+                output_path = reports_dir / output_name
+                output_path.write_text(report, encoding="utf-8")
+
+                exported += 1
+
+            except Exception as error:
+                errors.append(f"{file_path.name}: {error}")
+
+        if errors:
+            error_log = export_root / "export_errors.txt"
+            error_log.write_text("\n".join(errors), encoding="utf-8")
+
+        QMessageBox.information(
+            self,
+            "Export complete",
+            (
+                f"Folder report export finished.\n\n"
+                f"Exported reports: {exported}\n"
+                f"Errors: {len(errors)}\n\n"
+                f"Output folder:\n{export_root}"
+            ),
+        )
+
+        self.status_label.setText(
+            f"Status: Exported {exported} folder report(s), {len(errors)} error(s)."
+        )
+
     def open_outputs_folder(self) -> None:
         folder = outputs_dir()
 
@@ -1267,6 +1357,9 @@ class MainWindow(QMainWindow):
 
         if hasattr(self, "export_folder_summary_button"):
             self.export_folder_summary_button.setEnabled(False)
+
+        if hasattr(self, "export_all_reports_button"):
+            self.export_all_reports_button.setEnabled(False)
 
         self.path_label.setText("No file selected")
 
