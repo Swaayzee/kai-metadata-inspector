@@ -450,7 +450,7 @@ def clean_metadata_from_image(input_path: Path) -> Dict[str, Any]:
     }
 
 from kai_metadata_inspector.core.exiftool_runner import get_exiftool_version
-from kai_metadata_inspector.core.folder_summary import find_supported_files, build_folder_summary
+from kai_metadata_inspector.core.folder_summary import find_supported_files, build_folder_summary, build_folder_summary_csv
 
 
 from io import BytesIO
@@ -478,6 +478,7 @@ class MainWindow(QMainWindow):
         self.current_folder: Optional[Path] = None
         self.folder_files: List[Path] = []
         self.folder_index: int = 0
+        self.folder_summary: Optional[Dict[str, Any]] = None
         self.folder_summary_report: Optional[str] = None
 
         self.setWindowTitle(APP_NAME)
@@ -634,6 +635,7 @@ class MainWindow(QMainWindow):
         self.next_folder_file_button = QPushButton("Next file")
         self.scan_folder_button = QPushButton("Scan folder summary")
         self.export_folder_summary_button = QPushButton("Export folder summary")
+        self.export_folder_csv_button = QPushButton("Export folder CSV")
         self.export_all_reports_button = QPushButton("Export all reports")
         self.export_all_json_button = QPushButton("Export all JSON")
 
@@ -641,6 +643,7 @@ class MainWindow(QMainWindow):
         self.next_folder_file_button.setEnabled(False)
         self.scan_folder_button.setEnabled(False)
         self.export_folder_summary_button.setEnabled(False)
+        self.export_folder_csv_button.setEnabled(False)
         self.export_all_reports_button.setEnabled(False)
         self.export_all_json_button.setEnabled(False)
 
@@ -650,6 +653,7 @@ class MainWindow(QMainWindow):
             self.next_folder_file_button,
             self.scan_folder_button,
             self.export_folder_summary_button,
+            self.export_folder_csv_button,
             self.export_all_reports_button,
             self.export_all_json_button,
         ]:
@@ -779,6 +783,7 @@ class MainWindow(QMainWindow):
         self.next_folder_file_button.clicked.connect(self.load_next_folder_file)
         self.scan_folder_button.clicked.connect(self.scan_folder_summary)
         self.export_folder_summary_button.clicked.connect(self.export_folder_summary)
+        self.export_folder_csv_button.clicked.connect(self.export_folder_csv)
         self.export_all_reports_button.clicked.connect(self.export_all_reports)
         self.export_all_json_button.clicked.connect(self.export_all_json)
         self.clear_button.clicked.connect(self.clear_view)
@@ -1142,12 +1147,14 @@ class MainWindow(QMainWindow):
         self.current_folder = folder
         self.folder_files = files
         self.folder_index = 0
+        self.folder_summary = None
         self.folder_summary_report = None
 
         if hasattr(self, "folder_file_list"):
             self.folder_file_list.clear()
 
         self.export_folder_summary_button.setEnabled(False)
+        self.export_folder_csv_button.setEnabled(False)
         self.export_all_reports_button.setEnabled(False)
         self.export_all_json_button.setEnabled(False)
         self.previous_folder_file_button.setEnabled(False)
@@ -1157,6 +1164,7 @@ class MainWindow(QMainWindow):
             self.scan_folder_button.setEnabled(False)
             self.previous_folder_file_button.setEnabled(False)
             self.next_folder_file_button.setEnabled(False)
+            self.export_folder_csv_button.setEnabled(False)
             self.export_all_reports_button.setEnabled(False)
             self.export_all_json_button.setEnabled(False)
             self.report_box.setPlainText(
@@ -1270,15 +1278,17 @@ class MainWindow(QMainWindow):
             self.report_box.setPlainText("Scanning folder summary. Please wait...")
             QApplication.processEvents()
 
-            _summary, report = build_folder_summary(
+            summary, report = build_folder_summary(
                 self.current_folder,
                 self.folder_files,
                 get_exiftool_version(),
             )
 
+            self.folder_summary = summary
             self.folder_summary_report = report
             self.report_box.setPlainText(report)
             self.export_folder_summary_button.setEnabled(True)
+            self.export_folder_csv_button.setEnabled(True)
 
             self.status_label.setText(
                 f"Status: Folder summary complete. {len(self.folder_files)} file(s) checked."
@@ -1324,6 +1334,44 @@ class MainWindow(QMainWindow):
             f"Folder summary saved to:\n{destination}",
         )
         self.status_label.setText(f"Status: Folder summary exported to {destination}")
+
+    def export_folder_csv(self) -> None:
+        if not self.folder_summary or not self.current_folder:
+            QMessageBox.information(
+                self,
+                "No folder summary",
+                "Scan a folder summary first.",
+            )
+            return
+
+        default_path = outputs_dir() / f"{self.current_folder.name}_folder_summary_{now_stamp()}.csv"
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save folder summary CSV",
+            str(default_path),
+            "CSV files (*.csv);;All files (*.*)",
+        )
+
+        if not file_path:
+            return
+
+        destination = Path(file_path)
+
+        try:
+            csv_text = build_folder_summary_csv(self.folder_summary)
+            destination.write_text(csv_text, encoding="utf-8")
+        except Exception as error:
+            QMessageBox.critical(self, "Export error", f"Could not save folder CSV:\n{error}")
+            self.status_label.setText("Status: Error while exporting folder CSV.")
+            return
+
+        QMessageBox.information(
+            self,
+            "Folder CSV exported",
+            f"Folder CSV saved to:\n{destination}",
+        )
+        self.status_label.setText(f"Status: Folder CSV exported to {destination}")
 
     def export_all_reports(self) -> None:
         if not self.current_folder or not self.folder_files:
@@ -1514,6 +1562,7 @@ class MainWindow(QMainWindow):
         self.current_folder = None
         self.folder_files = []
         self.folder_index = 0
+        self.folder_summary = None
         self.folder_summary_report = None
 
         if hasattr(self, "folder_file_list"):
@@ -1530,6 +1579,9 @@ class MainWindow(QMainWindow):
 
         if hasattr(self, "export_folder_summary_button"):
             self.export_folder_summary_button.setEnabled(False)
+
+        if hasattr(self, "export_folder_csv_button"):
+            self.export_folder_csv_button.setEnabled(False)
 
         if hasattr(self, "export_all_reports_button"):
             self.export_all_reports_button.setEnabled(False)
