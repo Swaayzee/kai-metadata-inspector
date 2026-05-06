@@ -468,6 +468,10 @@ from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QListWidget, QListWidgetItem
 
 
+from PySide6.QtWidgets import QLineEdit, QTextEdit
+
+from kai_metadata_inspector.core.metadata_writer import write_metadata_to_original
+
 class MainWindow(QMainWindow):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__()
@@ -607,6 +611,7 @@ class MainWindow(QMainWindow):
         self.inspect_button = QPushButton("Inspect metadata")
         self.export_button = QPushButton("Export report")
         self.clean_button = QPushButton("Create cleaned copy")
+        self.write_metadata_button = QPushButton("Edit metadata")
         self.outputs_button = QPushButton("Open outputs")
         self.clear_button = QPushButton("Clear")
 
@@ -615,6 +620,7 @@ class MainWindow(QMainWindow):
             self.inspect_button,
             self.export_button,
             self.clean_button,
+            self.write_metadata_button,
             self.outputs_button,
             self.clear_button,
         ]:
@@ -667,6 +673,101 @@ class MainWindow(QMainWindow):
         self.path_label.setObjectName("PathLabel")
         self.path_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         root_layout.addWidget(self.path_label)
+
+        self.metadata_editor_group = QGroupBox("Edit metadata")
+        self.metadata_editor_group.setVisible(False)
+
+        metadata_editor_layout = QGridLayout(self.metadata_editor_group)
+
+        self.edit_title_input = QLineEdit()
+        self.edit_description_input = QTextEdit()
+        self.edit_description_input.setMaximumHeight(70)
+        self.edit_creator_input = QLineEdit()
+        self.edit_rights_input = QLineEdit()
+        self.edit_keywords_input = QLineEdit()
+
+        self.edit_camera_make_input = QLineEdit()
+        self.edit_camera_model_input = QLineEdit()
+        self.edit_lens_make_input = QLineEdit()
+        self.edit_lens_model_input = QLineEdit()
+        self.edit_gps_latitude_input = QLineEdit()
+        self.edit_gps_longitude_input = QLineEdit()
+        self.edit_gps_altitude_input = QLineEdit()
+        self.edit_date_taken_input = QLineEdit()
+
+        self.edit_title_input.setPlaceholderText("Optional title")
+        self.edit_description_input.setPlaceholderText("Optional description")
+        self.edit_creator_input.setPlaceholderText("Creator / Author")
+        self.edit_rights_input.setPlaceholderText("Copyright / Rights")
+        self.edit_keywords_input.setPlaceholderText("Example: travel, product, personal")
+        self.edit_camera_make_input.setPlaceholderText("Example: Apple, Samsung, Canon")
+        self.edit_camera_model_input.setPlaceholderText("Example: iPhone XS, Galaxy S23, EOS R6")
+        self.edit_lens_make_input.setPlaceholderText("Example: Canon, Nikon, Sony")
+        self.edit_lens_model_input.setPlaceholderText("Example: EF 50mm f/1.8")
+        self.edit_gps_latitude_input.setPlaceholderText("Decimal degrees: 53.5431 or -53.5431")
+        self.edit_gps_longitude_input.setPlaceholderText("Decimal degrees: -2.6327 or 2.6327")
+        self.edit_gps_altitude_input.setPlaceholderText("Metres, optional")
+        self.edit_date_taken_input.setPlaceholderText("EXIF format: YYYY:MM:DD HH:MM:SS")
+
+        self.save_metadata_button = QPushButton("Save metadata")
+        self.clear_metadata_fields_button = QPushButton("Clear fields")
+        self.cancel_metadata_button = QPushButton("Cancel edit")
+
+        metadata_editor_layout.addWidget(QLabel("Title"), 0, 0)
+        metadata_editor_layout.addWidget(self.edit_title_input, 0, 1)
+
+        metadata_editor_layout.addWidget(QLabel("Description"), 1, 0)
+        metadata_editor_layout.addWidget(self.edit_description_input, 1, 1)
+
+        metadata_editor_layout.addWidget(QLabel("Creator / Author"), 2, 0)
+        metadata_editor_layout.addWidget(self.edit_creator_input, 2, 1)
+
+        metadata_editor_layout.addWidget(QLabel("Copyright / Rights"), 3, 0)
+        metadata_editor_layout.addWidget(self.edit_rights_input, 3, 1)
+
+        metadata_editor_layout.addWidget(QLabel("Keywords"), 4, 0)
+        metadata_editor_layout.addWidget(self.edit_keywords_input, 4, 1)
+
+        metadata_editor_layout.addWidget(QLabel("Camera make"), 5, 0)
+        metadata_editor_layout.addWidget(self.edit_camera_make_input, 5, 1)
+
+        metadata_editor_layout.addWidget(QLabel("Camera / phone model"), 6, 0)
+        metadata_editor_layout.addWidget(self.edit_camera_model_input, 6, 1)
+
+        metadata_editor_layout.addWidget(QLabel("Lens make"), 7, 0)
+        metadata_editor_layout.addWidget(self.edit_lens_make_input, 7, 1)
+
+        metadata_editor_layout.addWidget(QLabel("Lens model"), 8, 0)
+        metadata_editor_layout.addWidget(self.edit_lens_model_input, 8, 1)
+
+        metadata_editor_layout.addWidget(QLabel("GPS latitude"), 9, 0)
+        metadata_editor_layout.addWidget(self.edit_gps_latitude_input, 9, 1)
+
+        metadata_editor_layout.addWidget(QLabel("GPS longitude"), 10, 0)
+        metadata_editor_layout.addWidget(self.edit_gps_longitude_input, 10, 1)
+
+        metadata_editor_layout.addWidget(QLabel("GPS altitude"), 11, 0)
+        metadata_editor_layout.addWidget(self.edit_gps_altitude_input, 11, 1)
+
+        metadata_editor_layout.addWidget(QLabel("Date/time taken"), 12, 0)
+        metadata_editor_layout.addWidget(self.edit_date_taken_input, 12, 1)
+
+        editor_note = QLabel(
+            "Note: saving writes metadata directly to the selected original file. "
+            "GPS uses decimal degrees. Date/time uses YYYY:MM:DD HH:MM:SS."
+        )
+        editor_note.setObjectName("PathLabel")
+        metadata_editor_layout.addWidget(editor_note, 13, 1)
+
+        editor_button_row = QHBoxLayout()
+        editor_button_row.addWidget(self.save_metadata_button)
+        editor_button_row.addWidget(self.clear_metadata_fields_button)
+        editor_button_row.addWidget(self.cancel_metadata_button)
+        editor_button_row.addStretch(1)
+
+        metadata_editor_layout.addLayout(editor_button_row, 14, 1)
+
+        root_layout.addWidget(self.metadata_editor_group)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         root_layout.addWidget(splitter, stretch=1)
@@ -776,6 +877,10 @@ class MainWindow(QMainWindow):
         self.inspect_button.clicked.connect(self.inspect_current_file)
         self.export_button.clicked.connect(self.export_report)
         self.clean_button.clicked.connect(self.create_clean_copy)
+        self.write_metadata_button.clicked.connect(self.show_metadata_editor)
+        self.save_metadata_button.clicked.connect(self.save_new_metadata)
+        self.clear_metadata_fields_button.clicked.connect(self.clear_metadata_editor_fields)
+        self.cancel_metadata_button.clicked.connect(self.hide_metadata_editor)
         self.outputs_button.clicked.connect(self.open_outputs_folder)
 
         self.open_folder_button.clicked.connect(self.open_folder_dialog)
@@ -1038,6 +1143,172 @@ class MainWindow(QMainWindow):
 
         QMessageBox.information(self, "Report exported", f"Report saved to:\n{destination}")
         self.status_label.setText(f"Status: Report exported to {destination}")
+
+    def _find_metadata_value(self, metadata: Dict[str, Any], possible_names: List[str]) -> str:
+        possible_lower = [name.lower() for name in possible_names]
+
+        def search(value: Any) -> Optional[str]:
+            if isinstance(value, dict):
+                for key, item in value.items():
+                    key_lower = str(key).lower()
+
+                    for possible in possible_lower:
+                        if possible == key_lower or possible in key_lower:
+                            if isinstance(item, (str, int, float)):
+                                return str(item)
+                            if isinstance(item, list):
+                                return ", ".join(str(x) for x in item)
+
+                    found = search(item)
+                    if found:
+                        return found
+
+            elif isinstance(value, list):
+                for item in value:
+                    found = search(item)
+                    if found:
+                        return found
+
+            return None
+
+        return search(metadata) or ""
+
+    def show_metadata_editor(self) -> None:
+        if not self.current_path:
+            QMessageBox.information(self, "No file selected", "Open an image file first.")
+            return
+
+        if self.current_metadata is None:
+            self.inspect_current_file()
+
+        metadata = self.current_metadata or {}
+
+        self.edit_title_input.setText(
+            self._find_metadata_value(metadata, ["title", "headline", "xmp-dc:title"])
+        )
+
+        self.edit_description_input.setPlainText(
+            self._find_metadata_value(
+                metadata,
+                ["description", "caption", "image description", "xmp-dc:description"],
+            )
+        )
+
+        self.edit_creator_input.setText(
+            self._find_metadata_value(metadata, ["creator", "artist", "author", "xmp-dc:creator"])
+        )
+
+        self.edit_rights_input.setText(
+            self._find_metadata_value(metadata, ["rights", "copyright", "xmp-dc:rights"])
+        )
+
+        self.edit_keywords_input.setText(
+            self._find_metadata_value(metadata, ["keywords", "subject", "xmp-dc:subject"])
+        )
+
+        self.edit_camera_make_input.setText(
+            self._find_metadata_value(metadata, ["make", "camera make", "xmp-tiff:make"])
+        )
+
+        self.edit_camera_model_input.setText(
+            self._find_metadata_value(metadata, ["model", "camera model", "hostcomputer", "xmp-tiff:model"])
+        )
+
+        self.edit_lens_make_input.setText(
+            self._find_metadata_value(metadata, ["lensmake", "lens make"])
+        )
+
+        self.edit_lens_model_input.setText(
+            self._find_metadata_value(metadata, ["lensmodel", "lens model"])
+        )
+
+        self.edit_gps_latitude_input.setText(
+            self._find_metadata_value(metadata, ["gpslatitudedecimal", "gpslatitude"])
+        )
+
+        self.edit_gps_longitude_input.setText(
+            self._find_metadata_value(metadata, ["gpslongitudedecimal", "gpslongitude"])
+        )
+
+        self.edit_gps_altitude_input.setText(
+            self._find_metadata_value(metadata, ["gpsaltitude"])
+        )
+
+        self.edit_date_taken_input.setText(
+            self._find_metadata_value(metadata, ["datetimeoriginal", "createdate", "date/time original", "datetime"])
+        )
+
+        self.metadata_editor_group.setVisible(True)
+        self.status_label.setText("Status: Metadata editor opened.")
+
+    def hide_metadata_editor(self) -> None:
+        self.metadata_editor_group.setVisible(False)
+        self.status_label.setText("Status: Metadata editor closed.")
+
+    def clear_metadata_editor_fields(self) -> None:
+        self.edit_title_input.clear()
+        self.edit_description_input.clear()
+        self.edit_creator_input.clear()
+        self.edit_rights_input.clear()
+        self.edit_keywords_input.clear()
+        self.edit_camera_make_input.clear()
+        self.edit_camera_model_input.clear()
+        self.edit_lens_make_input.clear()
+        self.edit_lens_model_input.clear()
+        self.edit_gps_latitude_input.clear()
+        self.edit_gps_longitude_input.clear()
+        self.edit_gps_altitude_input.clear()
+        self.edit_date_taken_input.clear()
+        self.status_label.setText("Status: Metadata editor fields cleared.")
+
+    def save_new_metadata(self) -> None:
+        if not self.current_path:
+            QMessageBox.information(self, "No file selected", "Open an image file first.")
+            return
+
+        keywords = [
+            keyword.strip()
+            for keyword in self.edit_keywords_input.text().split(",")
+            if keyword.strip()
+        ]
+
+        fields = {
+            "title": self.edit_title_input.text().strip(),
+            "description": self.edit_description_input.toPlainText().strip(),
+            "creator": self.edit_creator_input.text().strip(),
+            "rights": self.edit_rights_input.text().strip(),
+            "keywords": keywords,
+            "camera_make": self.edit_camera_make_input.text().strip(),
+            "camera_model": self.edit_camera_model_input.text().strip(),
+            "lens_make": self.edit_lens_make_input.text().strip(),
+            "lens_model": self.edit_lens_model_input.text().strip(),
+            "gps_latitude": self.edit_gps_latitude_input.text().strip(),
+            "gps_longitude": self.edit_gps_longitude_input.text().strip(),
+            "gps_altitude": self.edit_gps_altitude_input.text().strip(),
+            "date_taken": self.edit_date_taken_input.text().strip(),
+        }
+
+        if not any(fields.values()):
+            self.status_label.setText("Status: No metadata entered. Nothing saved.")
+            return
+
+        try:
+            self.status_label.setText("Status: Saving metadata to original file...")
+            QApplication.processEvents()
+
+            result = write_metadata_to_original(self.current_path, fields)
+
+            self.load_file(Path(result["file_path"]))
+            self.inspect_current_file()
+            self.metadata_editor_group.setVisible(False)
+
+            self.status_label.setText(
+                f"Status: Metadata saved. Report created: {result['report_path']}"
+            )
+
+        except Exception as error:
+            QMessageBox.critical(self, "Save metadata error", f"Could not save metadata:\n{error}")
+            self.status_label.setText("Status: Error while saving metadata.")
 
     def create_clean_copy(self) -> None:
         if not self.current_path:
