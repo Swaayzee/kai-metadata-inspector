@@ -640,7 +640,7 @@ class MainWindow(QMainWindow):
         self.outputs_button = QPushButton("Outputs")
         self.clear_button = QPushButton("Clear")
 
-        button_row.setSpacing(0)
+        button_row.setSpacing(16)
         button_row.addStretch(1)
 
         for button in [
@@ -653,8 +653,8 @@ class MainWindow(QMainWindow):
         ]:
             button.setMinimumHeight(34)
             button_row.addWidget(button)
-            button_row.addStretch(1)
 
+        button_row.addStretch(1)
         root_layout.addLayout(button_row)
 
         folder_tools_label = QLabel("Folder tools")
@@ -680,7 +680,7 @@ class MainWindow(QMainWindow):
         self.export_all_reports_button.setEnabled(False)
         self.export_all_json_button.setEnabled(False)
 
-        folder_button_row.setSpacing(0)
+        folder_button_row.setSpacing(14)
         folder_button_row.addStretch(1)
 
         for button in [
@@ -695,8 +695,8 @@ class MainWindow(QMainWindow):
         ]:
             button.setMinimumHeight(34)
             folder_button_row.addWidget(button)
-            folder_button_row.addStretch(1)
 
+        folder_button_row.addStretch(1)
         root_layout.addLayout(folder_button_row)
 
         self.path_label = QLabel("No file selected")
