@@ -608,7 +608,6 @@ class MainWindow(QMainWindow):
         button_row = QHBoxLayout()
 
         self.open_button = QPushButton("Open image")
-        self.inspect_button = QPushButton("Inspect metadata")
         self.export_button = QPushButton("Export report")
         self.clean_button = QPushButton("Create cleaned copy")
         self.write_metadata_button = QPushButton("Edit metadata")
@@ -617,7 +616,6 @@ class MainWindow(QMainWindow):
 
         for button in [
             self.open_button,
-            self.inspect_button,
             self.export_button,
             self.clean_button,
             self.write_metadata_button,
@@ -874,7 +872,6 @@ class MainWindow(QMainWindow):
 
 
         self.open_button.clicked.connect(self.open_file_dialog)
-        self.inspect_button.clicked.connect(self.inspect_current_file)
         self.export_button.clicked.connect(self.export_report)
         self.clean_button.clicked.connect(self.create_clean_copy)
         self.write_metadata_button.clicked.connect(self.show_metadata_editor)
