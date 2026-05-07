@@ -474,6 +474,30 @@ from kai_metadata_inspector.core.metadata_writer import write_metadata_to_origin
 
 from kai_metadata_inspector.config import APP_VERSION
 
+
+class _NullLabel:
+    def setText(self, *_args, **_kwargs) -> None:
+        pass
+
+    def clear(self) -> None:
+        pass
+
+
+class _NullTextBuffer:
+    def __init__(self) -> None:
+        self._text = ""
+
+    def setPlainText(self, text: str) -> None:
+        self._text = str(text)
+
+    def toPlainText(self) -> str:
+        return self._text
+
+    def clear(self) -> None:
+        self._text = ""
+
+
+
 class MainWindow(QMainWindow):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__()
@@ -488,7 +512,7 @@ class MainWindow(QMainWindow):
         self.folder_summary_report: Optional[str] = None
 
         self.setWindowTitle(f"{APP_NAME} — {APP_VERSION}")
-        self.resize(1120, 760)
+        self.resize(1280, 820)
         self.setAcceptDrops(True)
 
         self._build_ui()
@@ -603,12 +627,9 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
 
         root_layout = QVBoxLayout(central)
-        root_layout.setContentsMargins(12, 12, 12, 12)
-        root_layout.setSpacing(10)
+        root_layout.setContentsMargins(10, 8, 10, 8)
+        root_layout.setSpacing(8)
 
-        title = QLabel(APP_NAME)
-        title.setObjectName("TitleLabel")
-        root_layout.addWidget(title)
 
         button_row = QHBoxLayout()
 
@@ -785,7 +806,7 @@ class MainWindow(QMainWindow):
         self.preview_label = QLabel("Open an image to preview it here")
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview_label.setFrameShape(QFrame.Shape.StyledPanel)
-        self.preview_label.setMinimumSize(360, 360)
+        self.preview_label.setMinimumSize(420, 460)
         self.preview_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.preview_label.setScaledContents(False)
 
@@ -821,13 +842,14 @@ class MainWindow(QMainWindow):
         quick_layout.addWidget(QLabel("GPS:"), 3, 0)
         quick_layout.addWidget(self.summary_gps, 3, 1)
 
-        left_layout.addWidget(quick_group, stretch=1)
+        quick_group.setVisible(False)
+        quick_group.setVisible(False)
 
         folder_files_group = QGroupBox("Folder files")
         folder_files_layout = QVBoxLayout(folder_files_group)
 
         self.folder_file_list = QListWidget()
-        self.folder_file_list.setMinimumHeight(120)
+        self.folder_file_list.setMinimumHeight(170)
         self.folder_file_list.itemClicked.connect(self.load_selected_folder_file)
 
         folder_files_layout.addWidget(self.folder_file_list)
@@ -850,7 +872,7 @@ class MainWindow(QMainWindow):
         self.metadata_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
 
         metadata_layout.addWidget(self.metadata_table)
-        right_layout.addWidget(metadata_group, stretch=3)
+        right_layout.addWidget(metadata_group, stretch=1)
 
         report_group = QGroupBox("Report text")
         report_layout = QVBoxLayout(report_group)
@@ -860,10 +882,12 @@ class MainWindow(QMainWindow):
         self.report_box.setPlaceholderText("The plain-text report will appear here after inspection.")
 
         report_layout.addWidget(self.report_box)
-        right_layout.addWidget(report_group, stretch=2)
+        report_group.setVisible(False)
+        report_group.setVisible(False)
 
         splitter.addWidget(left_panel)
         splitter.addWidget(right_panel)
+        splitter.setSizes([460, 800])
         splitter.setSizes([420, 700])
 
         self.status_label = QLabel("Status: Ready")
@@ -871,6 +895,15 @@ class MainWindow(QMainWindow):
         self.status_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
         root_layout.addWidget(self.status_label)
+
+        # Final v1.0 clean layout:
+        # Quick Summary and Report Text panels are removed from active UI.
+        # These placeholders keep older internal update calls harmless.
+        self.summary_file = _NullLabel()
+        self.summary_size = _NullLabel()
+        self.summary_dimensions = _NullLabel()
+        self.summary_gps = _NullLabel()
+        self.report_box = _NullTextBuffer()
 
 
 
@@ -1087,29 +1120,10 @@ class MainWindow(QMainWindow):
         self.metadata_table.resizeRowsToContents()
 
     def _fill_summary(self, metadata: Dict[str, Any]) -> None:
-        file_meta = metadata.get("file", {}) or {}
-        image_meta = metadata.get("image", {}) or {}
-        gps_meta = metadata.get("gps", {}) or {}
+        # Quick Summary panel was removed from the final v1.0 layout.
+        # Metadata is now shown in the main Metadata table only.
+        return
 
-        self.summary_file.setText(safe_text(file_meta.get("Name", "-")))
-        self.summary_size.setText(safe_text(file_meta.get("Size", "-")))
-
-        width = image_meta.get("Width")
-        height = image_meta.get("Height")
-        fmt = image_meta.get("Format", "")
-
-        if width and height:
-            self.summary_dimensions.setText(f"{width} x {height} ({fmt})")
-        else:
-            self.summary_dimensions.setText("-")
-
-        lat = gps_meta.get("GPSLatitudeDecimal")
-        lon = gps_meta.get("GPSLongitudeDecimal")
-
-        if lat is not None and lon is not None:
-            self.summary_gps.setText(f"{lat}, {lon}")
-        else:
-            self.summary_gps.setText("No GPS coordinates found")
 
     def export_report(self) -> None:
         if not self.current_path:
