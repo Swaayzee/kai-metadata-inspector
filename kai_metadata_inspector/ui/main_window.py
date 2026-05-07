@@ -472,6 +472,8 @@ from PySide6.QtWidgets import QLineEdit, QTextEdit
 
 from kai_metadata_inspector.core.metadata_writer import write_metadata_to_original
 
+from kai_metadata_inspector.config import APP_VERSION
+
 class MainWindow(QMainWindow):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__()
@@ -485,7 +487,7 @@ class MainWindow(QMainWindow):
         self.folder_summary: Optional[Dict[str, Any]] = None
         self.folder_summary_report: Optional[str] = None
 
-        self.setWindowTitle(APP_NAME)
+        self.setWindowTitle(f"{APP_NAME} — {APP_VERSION}")
         self.resize(1120, 760)
         self.setAcceptDrops(True)
 
@@ -528,7 +530,8 @@ class MainWindow(QMainWindow):
                 "- Search and read metadata in a clean table\n"
                 "- Export reports\n"
                 "- Scan folders\n"
-                "- Create cleaned copies without modifying originals\n\n"
+                "- Create cleaned copies without modifying originals\n"
+                "- Edit selected metadata directly on original files\n\n"
                 "Design goal:\n"
                 "Help users understand what their images reveal before sharing them."
             ),
@@ -547,7 +550,9 @@ class MainWindow(QMainWindow):
                 "- Software/editing history\n"
                 "- Device serial numbers\n"
                 "- Owner or copyright information\n\n"
-                "This app is designed to be offline-first and read-only for inspection.\n\n"
+                "Inspection mode is offline-first and read-only.\n\n"
+                "Clean copy mode creates a new file.\n"
+                "Edit metadata mode writes metadata directly to the selected original file.\n\n"
                 "Exported TXT/JSON/CSV reports may also contain sensitive information. "
                 "Review reports before sharing them."
             ),
@@ -609,9 +614,9 @@ class MainWindow(QMainWindow):
 
         self.open_button = QPushButton("Open image")
         self.export_button = QPushButton("Export report")
-        self.clean_button = QPushButton("Create cleaned copy")
+        self.clean_button = QPushButton("Clean copy")
         self.write_metadata_button = QPushButton("Edit metadata")
-        self.outputs_button = QPushButton("Open outputs")
+        self.outputs_button = QPushButton("Outputs")
         self.clear_button = QPushButton("Clear")
 
         for button in [
@@ -635,12 +640,12 @@ class MainWindow(QMainWindow):
         folder_button_row = QHBoxLayout()
 
         self.open_folder_button = QPushButton("Open folder")
-        self.previous_folder_file_button = QPushButton("Previous file")
-        self.next_folder_file_button = QPushButton("Next file")
-        self.scan_folder_button = QPushButton("Scan folder summary")
-        self.export_folder_summary_button = QPushButton("Export folder summary")
-        self.export_folder_csv_button = QPushButton("Export folder CSV")
-        self.export_all_reports_button = QPushButton("Export all reports")
+        self.previous_folder_file_button = QPushButton("Previous")
+        self.next_folder_file_button = QPushButton("Next")
+        self.scan_folder_button = QPushButton("Scan summary")
+        self.export_folder_summary_button = QPushButton("Export summary TXT")
+        self.export_folder_csv_button = QPushButton("Export CSV")
+        self.export_all_reports_button = QPushButton("Export all TXT")
         self.export_all_json_button = QPushButton("Export all JSON")
 
         self.previous_folder_file_button.setEnabled(False)
@@ -711,43 +716,43 @@ class MainWindow(QMainWindow):
         self.clear_metadata_fields_button = QPushButton("Clear fields")
         self.cancel_metadata_button = QPushButton("Cancel edit")
 
-        metadata_editor_layout.addWidget(QLabel("Title"), 0, 0)
+        metadata_editor_layout.addWidget(QLabel("Basic: Title"), 0, 0)
         metadata_editor_layout.addWidget(self.edit_title_input, 0, 1)
 
-        metadata_editor_layout.addWidget(QLabel("Description"), 1, 0)
+        metadata_editor_layout.addWidget(QLabel("Basic: Description"), 1, 0)
         metadata_editor_layout.addWidget(self.edit_description_input, 1, 1)
 
-        metadata_editor_layout.addWidget(QLabel("Creator / Author"), 2, 0)
+        metadata_editor_layout.addWidget(QLabel("Basic: Creator / Author"), 2, 0)
         metadata_editor_layout.addWidget(self.edit_creator_input, 2, 1)
 
-        metadata_editor_layout.addWidget(QLabel("Copyright / Rights"), 3, 0)
+        metadata_editor_layout.addWidget(QLabel("Basic: Copyright / Rights"), 3, 0)
         metadata_editor_layout.addWidget(self.edit_rights_input, 3, 1)
 
-        metadata_editor_layout.addWidget(QLabel("Keywords"), 4, 0)
+        metadata_editor_layout.addWidget(QLabel("Basic: Keywords"), 4, 0)
         metadata_editor_layout.addWidget(self.edit_keywords_input, 4, 1)
 
-        metadata_editor_layout.addWidget(QLabel("Camera make"), 5, 0)
+        metadata_editor_layout.addWidget(QLabel("Device: Camera make"), 5, 0)
         metadata_editor_layout.addWidget(self.edit_camera_make_input, 5, 1)
 
-        metadata_editor_layout.addWidget(QLabel("Camera / phone model"), 6, 0)
+        metadata_editor_layout.addWidget(QLabel("Device: Camera / phone model"), 6, 0)
         metadata_editor_layout.addWidget(self.edit_camera_model_input, 6, 1)
 
-        metadata_editor_layout.addWidget(QLabel("Lens make"), 7, 0)
+        metadata_editor_layout.addWidget(QLabel("Device: Lens make"), 7, 0)
         metadata_editor_layout.addWidget(self.edit_lens_make_input, 7, 1)
 
-        metadata_editor_layout.addWidget(QLabel("Lens model"), 8, 0)
+        metadata_editor_layout.addWidget(QLabel("Device: Lens model"), 8, 0)
         metadata_editor_layout.addWidget(self.edit_lens_model_input, 8, 1)
 
-        metadata_editor_layout.addWidget(QLabel("GPS latitude"), 9, 0)
+        metadata_editor_layout.addWidget(QLabel("Location: GPS latitude"), 9, 0)
         metadata_editor_layout.addWidget(self.edit_gps_latitude_input, 9, 1)
 
-        metadata_editor_layout.addWidget(QLabel("GPS longitude"), 10, 0)
+        metadata_editor_layout.addWidget(QLabel("Location: GPS longitude"), 10, 0)
         metadata_editor_layout.addWidget(self.edit_gps_longitude_input, 10, 1)
 
-        metadata_editor_layout.addWidget(QLabel("GPS altitude"), 11, 0)
+        metadata_editor_layout.addWidget(QLabel("Location: GPS altitude"), 11, 0)
         metadata_editor_layout.addWidget(self.edit_gps_altitude_input, 11, 1)
 
-        metadata_editor_layout.addWidget(QLabel("Date/time taken"), 12, 0)
+        metadata_editor_layout.addWidget(QLabel("Time: Date/time taken"), 12, 0)
         metadata_editor_layout.addWidget(self.edit_date_taken_input, 12, 1)
 
         editor_note = QLabel(
