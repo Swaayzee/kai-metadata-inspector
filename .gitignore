@@ -23,3 +23,21 @@ Thumbs.db
 .vscode/
 .idea/
 EOF
+
+# App generated/private folders
+outputs/
+reports/
+samples/
+backups/
+test_images/
+private_images/
+pictures/
+
+# Editor/OS files
+*.bak
+*.save
+*.tmp
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
