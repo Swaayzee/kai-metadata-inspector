@@ -1,0 +1,109 @@
+name: Native builds
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: Kai-Metadata-Inspector-2.0.0-Windows-x64
+          - os: macos-15-intel
+            artifact: Kai-Metadata-Inspector-2.0.0-macOS-Intel
+          - os: macos-15
+            artifact: Kai-Metadata-Inspector-2.0.0-macOS-Apple-Silicon
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - run: ruff check .
+      - run: pytest -q
+        env:
+          QT_QPA_PLATFORM: offscreen
+      - name: Bundle ExifTool (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://sourceforge.net/projects/exiftool/files/exiftool-13.59_64.zip/download -OutFile exiftool.zip
+          Expand-Archive exiftool.zip -DestinationPath extracted
+          New-Item -ItemType Directory -Force vendor/exiftool | Out-Null
+          $exe = Get-ChildItem extracted -Recurse -Filter 'exiftool(-k).exe' | Select-Object -First 1
+          Copy-Item $exe.FullName vendor/exiftool/exiftool.exe
+          $files = Get-ChildItem extracted -Recurse -Directory -Filter exiftool_files | Select-Object -First 1
+          Copy-Item $files.FullName vendor/exiftool/exiftool_files -Recurse
+      - name: Bundle ExifTool (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          curl --fail --location --retry 3 https://sourceforge.net/projects/exiftool/files/Image-ExifTool-13.59.tar.gz/download -o exiftool.tar.gz
+          tar --no-same-owner -xzf exiftool.tar.gz
+          mkdir -p vendor/exiftool
+          cp Image-ExifTool-13.59/exiftool vendor/exiftool/exiftool
+          cp -R Image-ExifTool-13.59/lib vendor/exiftool/lib
+          chmod +x vendor/exiftool/exiftool
+      - run: pyinstaller --clean --noconfirm packaging/kai_metadata_inspector.spec
+      - name: Smoke test (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: '& "dist/Kai Metadata Inspector/Kai Metadata Inspector.exe" --diagnostics'
+      - name: Smoke test (macOS)
+        if: runner.os == 'macOS'
+        run: '"dist/Kai Metadata Inspector.app/Contents/MacOS/Kai Metadata Inspector" --diagnostics'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            dist/Kai Metadata Inspector/
+            dist/Kai Metadata Inspector.app/
+          if-no-files-found: error
+
+  appimage:
+    name: Linux AppImage (x86_64)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: sudo apt-get update && sudo apt-get install -y libegl1 libxcb-cursor0
+      - run: python -m pip install -r requirements-dev.txt
+      - run: ruff check .
+      - run: pytest -q
+        env:
+          QT_QPA_PLATFORM: offscreen
+      - name: Bundle ExifTool
+        run: |
+          curl --fail --location --retry 3 https://sourceforge.net/projects/exiftool/files/Image-ExifTool-13.59.tar.gz/download -o exiftool.tar.gz
+          tar --no-same-owner -xzf exiftool.tar.gz
+          mkdir -p vendor/exiftool
+          cp Image-ExifTool-13.59/exiftool vendor/exiftool/exiftool
+          cp -R Image-ExifTool-13.59/lib vendor/exiftool/lib
+          chmod +x vendor/exiftool/exiftool
+      - run: pyinstaller --clean --noconfirm packaging/kai_metadata_inspector.spec
+      - name: Build AppImage
+        run: |
+          curl --fail --location --retry 3 \
+            https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage \
+            -o appimagetool
+          chmod +x appimagetool packaging/linux/build_appimage.sh
+          APPIMAGETOOL="$PWD/appimagetool" packaging/linux/build_appimage.sh
+      - name: Smoke test AppImage
+        run: APPIMAGE_EXTRACT_AND_RUN=1 dist/Kai-Metadata-Inspector-2.0.0-x86_64.AppImage --diagnostics
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Kai-Metadata-Inspector-2.0.0-Linux-x86_64-AppImage
+          path: dist/Kai-Metadata-Inspector-2.0.0-x86_64.AppImage
+          if-no-files-found: error
