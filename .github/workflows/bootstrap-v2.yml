@@ -1,0 +1,32 @@
+name: Apply verified Kai 2.0 tree
+
+on:
+  push:
+    branches:
+      - "agent/v2.0-release"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply-release-tree:
+    if: ${{ github.actor == github.repository_owner }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: "agent/v2.0-release"
+      - name: Verify and apply release tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "b819a0386852bc11372c12471db5db66b81ad4fd59c34380eca58fe415751449  kai-v2-bootstrap.txt" | sha256sum --check -
+          git apply --check kai-v2-bootstrap.txt
+          git apply kai-v2-bootstrap.txt
+          rm kai-v2-bootstrap.txt .github/workflows/bootstrap-v2.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add --all
+          git commit -m "Build Kai Metadata Inspector 2.0 release candidate"
+          git push origin HEAD:"agent/v2.0-release"
