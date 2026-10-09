@@ -37,7 +37,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Invoke-WebRequest https://sourceforge.net/projects/exiftool/files/exiftool-13.59_64.zip/download -OutFile exiftool.zip
+          Invoke-WebRequest https://exiftool.org/exiftool-13.59_64.zip -OutFile exiftool.zip
           New-Item -ItemType Directory -Force extracted | Out-Null
           tar -xf exiftool.zip -C extracted
           New-Item -ItemType Directory -Force vendor/exiftool | Out-Null
