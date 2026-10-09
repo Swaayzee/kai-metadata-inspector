@@ -1,42 +1,14 @@
-# Privacy Notes
+# Privacy notes
 
-Kai Metadata Inspector is built to help users understand what their images reveal.
+Images can reveal GPS coordinates, capture time and timezone, device/lens identity, serial numbers, creator information, copyright, software history, thumbnails, and proprietary maker notes.
 
-## What images may reveal
+Kai runs locally and does not transmit files or coordinates. Inspection is read-only. Clean-copy mode creates and verifies a separate file. Metadata editing is intentionally destructive to the selected file but creates a local recovery backup first.
 
-Image metadata may include:
+TXT, JSON, CSV, screenshots, cleaning reports, and edit reports can contain sensitive information. Review them before sharing.
 
-- GPS location
-- Date and time
-- Timezone offset
-- Camera or phone model
-- Lens information
-- Device serial number
-- Owner/creator/copyright information
-- Editing software
-- File history or export tool
+For a safer sharing workflow:
 
-## Offline-first design
-
-By default, the app:
-
-- Does not upload files
-- Does not use cloud services
-- Does not send GPS coordinates anywhere
-- Does not perform reverse geocoding
-- Does not auto-open map links
-- Does not modify original files
-
-## Export warning
-
-TXT, JSON and CSV exports may contain sensitive information. Review exported reports carefully before sharing them.
-
-## Safe sharing advice
-
-Before sharing screenshots or reports publicly:
-
-- Remove GPS coordinates
-- Remove file paths
-- Remove serial numbers
-- Remove personal names
-- Remove private folder names
+1. Create a clean copy.
+2. Open the new copy in Kai.
+3. Search for `GPS`, `serial`, `owner`, `artist`, `copyright`, and `thumbnail`.
+4. Share only after reviewing the remaining fields.

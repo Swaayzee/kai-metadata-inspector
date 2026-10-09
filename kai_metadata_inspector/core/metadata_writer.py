@@ -1,11 +1,12 @@
 import hashlib
-import subprocess
-from pathlib import Path
+import shutil
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from kai_metadata_inspector.config import EXIFTOOL_TIMEOUT_SECONDS
+from kai_metadata_inspector.config import backups_dir
 from kai_metadata_inspector.core.exiftool_runner import safe_run_exiftool
+from kai_metadata_inspector.core.runtime import run_exiftool
 
 
 def sha256_file(file_path: Path) -> str:
@@ -80,7 +81,6 @@ def write_metadata_to_original(file_path: Path, fields: Dict[str, Any]) -> dict:
     original_hash_before = sha256_file(file_path)
 
     cmd = [
-        "exiftool",
         "-m",
         "-overwrite_original",
     ]
@@ -170,25 +170,21 @@ def write_metadata_to_original(file_path: Path, fields: Dict[str, Any]) -> dict:
         cmd.append(f"-XMP-xmp:ModifyDate={date_taken}")
         cmd.append(f"-XMP-photoshop:DateCreated={date_taken}")
 
-    if len(cmd) <= 3:
+    if len(cmd) <= 2:
         raise RuntimeError("No metadata fields were provided.")
 
-    cmd.append(str(file_path))
+    backup_path = backups_dir() / f"{file_path.stem}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{file_path.suffix}"
+    shutil.copy2(file_path, backup_path)
+    cmd.extend(["--", str(file_path)])
 
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=EXIFTOOL_TIMEOUT_SECONDS,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        raise RuntimeError(
-            f"ExifTool metadata writing timed out after {EXIFTOOL_TIMEOUT_SECONDS} seconds."
-        )
+        result = run_exiftool(cmd)
+    except Exception:
+        shutil.copy2(backup_path, file_path)
+        raise
 
     if result.returncode != 0:
+        shutil.copy2(backup_path, file_path)
         error_text = result.stderr.strip() or "Unknown ExifTool metadata writing error."
         raise RuntimeError(error_text)
 
@@ -215,6 +211,7 @@ def write_metadata_to_original(file_path: Path, fields: Dict[str, Any]) -> dict:
         "original_hash_before": original_hash_before,
         "original_hash_after": original_hash_after,
         "file_changed": original_hash_before != original_hash_after,
+        "backup_path": str(backup_path),
     }
 
 

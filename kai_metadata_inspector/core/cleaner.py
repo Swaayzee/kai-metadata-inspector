@@ -1,11 +1,10 @@
 import hashlib
 import shutil
-import subprocess
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
-from kai_metadata_inspector.config import EXIFTOOL_TIMEOUT_SECONDS
 from kai_metadata_inspector.core.exiftool_runner import safe_run_exiftool
+from kai_metadata_inspector.core.runtime import run_exiftool
 
 
 def sha256_file(file_path: Path) -> str:
@@ -58,29 +57,23 @@ def clean_metadata_copy(source_path: Path, output_path: Path) -> dict:
     # Copy bytes only. Do not preserve original filesystem timestamps.
     shutil.copyfile(source_path, output_path)
 
-    cmd = [
-        "exiftool",
+    arguments = [
         "-all=",
         "-overwrite_original",
+        "--",
         str(output_path),
     ]
 
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=EXIFTOOL_TIMEOUT_SECONDS,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
+        result = run_exiftool(arguments)
+    except RuntimeError:
         try:
             output_path.unlink(missing_ok=True)
         except Exception:
             pass
 
         raise RuntimeError(
-            f"ExifTool cleaning timed out after {EXIFTOOL_TIMEOUT_SECONDS} seconds."
+            "ExifTool could not finish cleaning the copy."
         )
 
     if result.returncode != 0:
@@ -138,6 +131,8 @@ def clean_metadata_copy(source_path: Path, output_path: Path) -> dict:
         "original_hash_after": original_hash_after,
         "cleaned_hash": cleaned_hash,
         "original_unchanged": original_hash_before == original_hash_after,
+        "removed_keys": removed_keys,
+        "remaining_keys": remaining_keys,
     }
 
 

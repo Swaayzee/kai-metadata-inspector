@@ -1,78 +1,34 @@
-# Kai Metadata Inspector Roadmap
+# Roadmap
 
-## v0.1 Linux Alpha
+## 2.0 release candidate
 
-- Open image/file
-- Extract metadata with ExifTool
-- Show metadata in tabs
-- Export TXT report
+- Unified ExifTool engine
+- Windows x64 build
+- macOS Intel and Apple Silicon builds
+- Responsive folder scans
+- Visible folder progress and cancellation
+- Searchable metadata table
+- Privacy findings and risk badge
+- Verified non-destructive cleaning
+- Before/after cleaning comparison
+- Recovery backups before metadata editing
+- Automated tests and packaged diagnostics
+- Linux x86_64 AppImage preview build
+- Final README screenshot and release documentation
 
-## v0.2 Linux Alpha
+## 2.0 final
 
-- Add image preview panel
-- Add improved left/right layout
-- Add raw metadata search
+- Validate Windows and macOS artifacts on physical machines
+- Validate the Linux AppImage on supported distributions
+- Add final application icon assets
+- Sign Windows executable
+- Sign and notarize macOS application
+- Publish checksums and a GitHub release
 
-## v0.3 Linux Alpha
+## Later, only after 2.0 stability
 
-- Improve GPS handling
-- Improve timezone analysis
-- Improve privacy-risk scoring
-- Add raw JSON export
+- Optional recursive scanning
+- User-selectable cleaning profiles (privacy, web-safe, preserve copyright)
+- Linux deb/rpm packages if user demand justifies the maintenance cost
 
-## v0.4 Linux Alpha
-
-- Add Open Folder
-- Add folder file list
-- Click folder files to inspect metadata
-
-## v0.5 Linux Alpha
-
-- Add folder summary scan
-- Count files with GPS
-- Count files with timestamps
-- Count files with device models
-- Count high-risk files
-- Export folder summary TXT
-
-## v0.6 Linux Alpha
-
-- Project cleanup
-- GitHub-ready docs
-- README
-- SECURITY
-- ROADMAP
-- run.sh launcher
-
-## Planned v0.7
-
-- Refactor app.py into modules
-- core/exiftool_runner.py
-- core/metadata_analyzer.py
-- core/report_builder.py
-- ui/main_window.py
-
-## Planned v0.8
-
-- Export all individual reports from folder
-- CSV export
-- Better folder summary table
-
-## Planned v0.9
-
-- Metadata cleaning copy mode
-- Never overwrite original files
-- Before/after report
-
-## Planned v1.0 Linux
-
-- Polished UI
-- Stable Linux release
-- AppImage or .deb package
-
-## Later
-
-- Windows version
-- Optional local AI explanation
-- Optional map integration
-- Optional reverse geocoding
+Cloud upload, telemetry, and online reverse geocoding remain intentionally out of scope.

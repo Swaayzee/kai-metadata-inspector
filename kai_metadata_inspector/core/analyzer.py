@@ -37,6 +37,24 @@ def format_section(title: str, data: dict) -> str:
     return "\n".join(lines)
 
 
+def signed_coordinate(raw: dict, axis: str) -> str:
+    """Return signed decimal GPS, honoring south/west references."""
+    key = "GPSLatitude" if axis == "lat" else "GPSLongitude"
+    ref_key = f"{key}Ref"
+    composite = raw.get(f"Composite:{key}")
+    value = composite if composite not in (None, "") else raw.get(f"GPS:{key}")
+    if value in (None, ""):
+        return "Not found"
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    ref = str(raw.get(f"GPS:{ref_key}", "")).upper()
+    if ref in {"S", "W"} and number > 0:
+        number = -number
+    return f"{number:.8f}".rstrip("0").rstrip(".")
+
+
 def gps_map_text(latitude: str, longitude: str) -> str:
     if latitude == "Not found" or longitude == "Not found":
         return "Not available"
@@ -76,8 +94,8 @@ def timezone_status(raw: dict) -> tuple[str, str]:
 def build_analysis(file_path: Path, raw: dict, exiftool_version: str) -> dict:
     file_size_mb = file_path.stat().st_size / (1024 * 1024)
 
-    gps_lat = get_any(raw, ["GPS:GPSLatitude", "Composite:GPSLatitude"])
-    gps_lon = get_any(raw, ["GPS:GPSLongitude", "Composite:GPSLongitude"])
+    gps_lat = signed_coordinate(raw, "lat")
+    gps_lon = signed_coordinate(raw, "lon")
     tz_status, tz_explanation = timezone_status(raw)
 
     file_info = {
@@ -153,7 +171,7 @@ def build_analysis(file_path: Path, raw: dict, exiftool_version: str) -> dict:
         "Copyright": get_any(raw, ["EXIF:Copyright", "IFD0:Copyright", "XMP:Rights"]),
     }
 
-    gps_found = has_any(raw, ["GPS:GPSLatitude", "GPS:GPSLongitude", "Composite:GPSLatitude", "Composite:GPSLongitude"])
+    gps_found = gps_lat != "Not found" or gps_lon != "Not found"
     time_found = has_any(raw, ["EXIF:DateTimeOriginal", "EXIF:CreateDate", "QuickTime:CreateDate", "XMP:CreateDate"])
     timezone_found = has_any(raw, ["EXIF:OffsetTimeOriginal", "EXIF:OffsetTimeDigitized", "EXIF:OffsetTime"])
     gps_time_found = has_any(raw, ["GPS:GPSDateStamp", "GPS:GPSTimeStamp"])
@@ -293,5 +311,7 @@ def build_analysis(file_path: Path, raw: dict, exiftool_version: str) -> dict:
             "software_found": software_found,
             "risk_points": risk_points,
             "risk_level": risk_level,
+            "gps_latitude": gps_lat,
+            "gps_longitude": gps_lon,
         }
     }

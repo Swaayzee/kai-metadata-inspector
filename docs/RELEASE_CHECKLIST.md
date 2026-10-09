@@ -1,67 +1,23 @@
-# Kai Metadata Inspector — Release Checklist
+# 2.0 release checklist
 
-## Version
+## Automated gates
 
-Target release: v1.0 Linux Alpha
+- [x] Syntax and Ruff checks
+- [x] Core tests
+- [x] Headless GUI construction test
+- [x] Real ExifTool GPS/clean integration test
+- [x] Local frozen-app diagnostics
+- [x] Local AppDir assembly validation
+- [ ] Windows native workflow
+- [ ] macOS Intel native workflow
+- [ ] macOS Apple Silicon native workflow
+- [ ] Linux x86_64 AppImage workflow
 
-## Core functionality
+## Manual gates
 
-- [ ] App launches with `python app.py`
-- [ ] App launches with `./run.sh`
-- [ ] Open Image / File works
-- [ ] Image preview works for JPG/PNG/WEBP/BMP/GIF
-- [ ] Unsupported preview formats fail gracefully
-- [ ] Metadata tabs display correctly
-- [ ] Raw metadata search works
-- [ ] Export TXT works
-- [ ] Export Raw JSON works
-- [ ] Open Folder works
-- [ ] Folder file list works
-- [ ] Clicking files in folder list works
-- [ ] Scan Folder Summary works
-- [ ] Export Folder Summary TXT works
-- [ ] Export Summary CSV works
-- [ ] Export All TXT works
-- [ ] Export All JSON works
-- [ ] Clear button works
-
-## Security and privacy
-
-- [ ] App is read-only
-- [ ] App does not modify original files
-- [ ] App does not upload anything
-- [ ] App does not use internet automatically
-- [ ] App does not auto-open map links
-- [ ] ExifTool is called without `shell=True`
-- [ ] ExifTool timeout exists
-- [ ] Metadata is displayed as plain text
-- [ ] Reports include privacy warning
-- [ ] Reports folder is ignored by Git
-
-## Test files
-
-Test with:
-
-- [ ] JPG with metadata
-- [ ] JPG without GPS
-- [ ] PNG screenshot
-- [ ] WEBP image
-- [ ] HEIC/HEIF image if available
-- [ ] TIFF if available
-- [ ] RAW/DNG if available
-- [ ] Folder with multiple images
-- [ ] File with unsupported extension
-- [ ] Large file warning
-
-## GitHub readiness
-
-- [ ] README.md is updated
-- [ ] SECURITY.md exists
-- [ ] LICENSE exists
-- [ ] ROADMAP.md exists
-- [ ] PROJECT_STATUS.md updated
-- [ ] requirements.txt updated
-- [ ] run.sh works
-- [ ] No private reports committed
-- [ ] No private images committed
-- [ ] Screenshots are redacted before publishing
+- [ ] Complete the native matrix in `docs/TESTING.md`
+- [ ] Add final `.ico` and `.icns` assets
+- [ ] Configure Windows code signing
+- [ ] Configure Apple Developer ID signing and notarization
+- [ ] Publish SHA-256 checksums
+- [ ] Create GitHub 2.0 release notes
