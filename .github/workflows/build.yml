@@ -38,7 +38,8 @@ jobs:
         shell: pwsh
         run: |
           Invoke-WebRequest https://sourceforge.net/projects/exiftool/files/exiftool-13.59_64.zip/download -OutFile exiftool.zip
-          Expand-Archive exiftool.zip -DestinationPath extracted
+          New-Item -ItemType Directory -Force extracted | Out-Null
+          tar -xf exiftool.zip -C extracted
           New-Item -ItemType Directory -Force vendor/exiftool | Out-Null
           $exe = Get-ChildItem extracted -Recurse -Filter 'exiftool(-k).exe' | Select-Object -First 1
           Copy-Item $exe.FullName vendor/exiftool/exiftool.exe
