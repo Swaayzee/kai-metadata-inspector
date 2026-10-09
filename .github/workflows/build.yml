@@ -37,9 +37,11 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Invoke-WebRequest https://exiftool.org/exiftool-13.59_64.zip -OutFile exiftool.zip
+          curl.exe --fail --location --retry 3 https://sourceforge.net/projects/exiftool/files/exiftool-13.59_64.zip/download --output exiftool.zip
+          if ($LASTEXITCODE -ne 0) { throw "Could not download ExifTool" }
           New-Item -ItemType Directory -Force extracted | Out-Null
           tar -xf exiftool.zip -C extracted
+          if ($LASTEXITCODE -ne 0) { throw "Could not extract ExifTool" }
           New-Item -ItemType Directory -Force vendor/exiftool | Out-Null
           $exe = Get-ChildItem extracted -Recurse -Filter 'exiftool(-k).exe' | Select-Object -First 1
           Copy-Item $exe.FullName vendor/exiftool/exiftool.exe
