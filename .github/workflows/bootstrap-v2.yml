@@ -22,9 +22,9 @@ jobs:
         run: |
           set -euo pipefail
           echo "b819a0386852bc11372c12471db5db66b81ad4fd59c34380eca58fe415751449  kai-v2-bootstrap.txt" | sha256sum --check -
-          git apply --check kai-v2-bootstrap.txt
-          git apply kai-v2-bootstrap.txt
-          rm kai-v2-bootstrap.txt .github/workflows/bootstrap-v2.yml
+          git apply --check --exclude='.github/workflows/*' kai-v2-bootstrap.txt
+          git apply --exclude='.github/workflows/*' kai-v2-bootstrap.txt
+          rm kai-v2-bootstrap.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add --all
