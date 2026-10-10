@@ -64,7 +64,7 @@ jobs:
       - name: Smoke test (macOS)
         if: runner.os == 'macOS'
         run: '"dist/Kai Metadata Inspector.app/Contents/MacOS/Kai Metadata Inspector" --diagnostics'
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.artifact }}
           path: |
@@ -105,7 +105,7 @@ jobs:
           APPIMAGETOOL="$PWD/appimagetool" packaging/linux/build_appimage.sh
       - name: Smoke test AppImage
         run: APPIMAGE_EXTRACT_AND_RUN=1 dist/Kai-Metadata-Inspector-2.0.0-x86_64.AppImage --diagnostics
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: Kai-Metadata-Inspector-2.0.0-Linux-x86_64-AppImage
           path: dist/Kai-Metadata-Inspector-2.0.0-x86_64.AppImage
