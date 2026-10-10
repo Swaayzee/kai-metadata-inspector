@@ -1,43 +1,31 @@
-cat > .gitignore <<'EOF'
 # Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
-
-# Virtual environment
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
 venv/
-.env/
 
-# Reports with possible private metadata
-reports/*.txt
-reports/*.json
-reports/*.csv
+# Builds and downloaded build inputs
+build/
+dist/
+vendor/
 
-# Backups
+# Private/generated data
+outputs/
+reports/
 backups/
+samples/
+test_images/
+private_images/
 
-# OS/editor files
+# Editors and operating systems
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
-EOF
-
-# App generated/private folders
-outputs/
-reports/
-samples/
-backups/
-test_images/
-private_images/
-pictures/
-
-# Editor/OS files
 *.bak
 *.save
 *.tmp
 *.swp
 *.swo
-.DS_Store
-Thumbs.db

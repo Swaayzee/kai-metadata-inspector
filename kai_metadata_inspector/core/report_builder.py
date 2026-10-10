@@ -1,8 +1,8 @@
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 from kai_metadata_inspector.config import APP_VERSION
-from kai_metadata_inspector.core.analyzer import format_section, clean_text
+from kai_metadata_inspector.core.analyzer import clean_text, format_section
 
 
 def build_report(file_path: Path, analysis: dict) -> str:

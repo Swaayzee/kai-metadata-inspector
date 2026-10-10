@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Kai Metadata Inspector
+Comment=Inspect and clean image metadata locally
+Exec=kai-metadata-inspector
+Icon=kai-metadata-inspector
+Terminal=false
+Categories=Graphics;Utility;Security;
+MimeType=image/jpeg;image/png;image/tiff;image/webp;image/heif;image/avif;
+StartupWMClass=Kai Metadata Inspector

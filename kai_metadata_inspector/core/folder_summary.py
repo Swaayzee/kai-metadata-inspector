@@ -1,9 +1,10 @@
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+from typing import Callable
 
 from kai_metadata_inspector.config import APP_VERSION, SUPPORTED_EXTENSIONS
-from kai_metadata_inspector.core.exiftool_runner import safe_run_exiftool
 from kai_metadata_inspector.core.analyzer import build_analysis
+from kai_metadata_inspector.core.exiftool_runner import safe_run_exiftool
 
 
 def find_supported_files(folder_path: Path) -> list[Path]:
@@ -30,6 +31,8 @@ def build_folder_summary(
     folder_path: Path,
     files: list[Path],
     exiftool_version: str,
+    progress_callback: Callable[[int, int, str], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> tuple[dict, str]:
     """
     Scans metadata for each supported file in the selected folder.
@@ -62,9 +65,14 @@ def build_folder_summary(
         "device_models": {},
         "file_rows": [],
         "errors": [],
+        "cancelled": False,
     }
 
-    for file_path in files:
+    total = len(files)
+    for index, file_path in enumerate(files, start=1):
+        if should_cancel and should_cancel():
+            summary["cancelled"] = True
+            break
         try:
             raw = safe_run_exiftool(file_path)
             analysis = build_analysis(file_path, raw, exiftool_version)
@@ -134,6 +142,9 @@ def build_folder_summary(
                 "error": str(error),
             })
 
+        if progress_callback:
+            progress_callback(index, total, file_path.name)
+
     report = build_folder_summary_report(summary)
     return summary, report
 
@@ -161,6 +172,7 @@ def build_folder_summary_report(summary: dict) -> str:
     lines.append(f"Total supported files: {summary['total_supported_files']}")
     lines.append(f"Successfully scanned: {summary['scanned_ok']}")
     lines.append(f"Scan errors: {summary['scan_errors']}")
+    lines.append(f"Cancelled: {'Yes' if summary.get('cancelled') else 'No'}")
     lines.append(f"Files with GPS: {summary['gps_count']}")
     lines.append(f"Files with timestamps: {summary['timestamp_count']}")
     lines.append(f"Files with timezone offset: {summary['timezone_count']}")
