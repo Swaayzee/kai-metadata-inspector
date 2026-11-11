@@ -4,7 +4,7 @@ set -eu
 PROJECT_ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 DIST_DIR="$PROJECT_ROOT/dist/Kai Metadata Inspector"
 APPDIR="${1:-$PROJECT_ROOT/build/KaiMetadataInspector.AppDir}"
-OUTPUT="${2:-$PROJECT_ROOT/dist/Kai-Metadata-Inspector-2.0.0-x86_64.AppImage}"
+OUTPUT="${2:-$PROJECT_ROOT/dist/Kai-Metadata-Inspector-2.1.0-x86_64.AppImage}"
 APPIMAGETOOL="${APPIMAGETOOL:-appimagetool}"
 
 if [ ! -x "$DIST_DIR/Kai Metadata Inspector" ]; then

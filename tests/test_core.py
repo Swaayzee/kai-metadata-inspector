@@ -54,8 +54,8 @@ def test_folder_summary_reports_progress_and_can_cancel(
         path.write_bytes(b"sample")
 
     monkeypatch.setattr(
-        "kai_metadata_inspector.core.folder_summary.safe_run_exiftool",
-        lambda _path: {"EXIF:Make": "Kai"},
+        "kai_metadata_inspector.core.folder_summary.read_metadata_batch",
+        lambda paths: {path: {"EXIF:Make": "Kai"} for path in paths},
     )
     progress: list[tuple[int, int, str]] = []
     summary, report = build_folder_summary(

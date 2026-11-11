@@ -16,11 +16,11 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            artifact: Kai-Metadata-Inspector-2.0.0-Windows-x64
+            artifact: Kai-Metadata-Inspector-2.1.0-Windows-x64
           - os: macos-15-intel
-            artifact: Kai-Metadata-Inspector-2.0.0-macOS-Intel
+            artifact: Kai-Metadata-Inspector-2.1.0-macOS-Intel
           - os: macos-15
-            artifact: Kai-Metadata-Inspector-2.0.0-macOS-Apple-Silicon
+            artifact: Kai-Metadata-Inspector-2.1.0-macOS-Apple-Silicon
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -104,9 +104,9 @@ jobs:
           chmod +x appimagetool packaging/linux/build_appimage.sh
           APPIMAGETOOL="$PWD/appimagetool" packaging/linux/build_appimage.sh
       - name: Smoke test AppImage
-        run: APPIMAGE_EXTRACT_AND_RUN=1 dist/Kai-Metadata-Inspector-2.0.0-x86_64.AppImage --diagnostics
+        run: APPIMAGE_EXTRACT_AND_RUN=1 dist/Kai-Metadata-Inspector-2.1.0-x86_64.AppImage --diagnostics
       - uses: actions/upload-artifact@v6
         with:
-          name: Kai-Metadata-Inspector-2.0.0-Linux-x86_64-AppImage
-          path: dist/Kai-Metadata-Inspector-2.0.0-x86_64.AppImage
+          name: Kai-Metadata-Inspector-2.1.0-Linux-x86_64-AppImage
+          path: dist/Kai-Metadata-Inspector-2.1.0-x86_64.AppImage
           if-no-files-found: error

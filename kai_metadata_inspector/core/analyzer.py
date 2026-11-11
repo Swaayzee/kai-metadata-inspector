@@ -37,19 +37,35 @@ def format_section(title: str, data: dict) -> str:
     return "\n".join(lines)
 
 
+# ExifTool is run with -G (family 0), so GPS and IFD0 tags are reported in the
+# "EXIF:" group. The "GPS:" names are kept for callers that pass -G1 output.
+GPS_DATE_KEYS = ["EXIF:GPSDateStamp", "GPS:GPSDateStamp", "XMP:GPSDateStamp", "Composite:GPSDateTime"]
+GPS_TIME_KEYS = ["EXIF:GPSTimeStamp", "GPS:GPSTimeStamp", "XMP:GPSTimeStamp"]
+
+
+def _first_present(raw: dict, keys: list[str]) -> object:
+    for key in keys:
+        value = raw.get(key)
+        if value not in (None, ""):
+            return value
+    return None
+
+
 def signed_coordinate(raw: dict, axis: str) -> str:
     """Return signed decimal GPS, honoring south/west references."""
     key = "GPSLatitude" if axis == "lat" else "GPSLongitude"
     ref_key = f"{key}Ref"
     composite = raw.get(f"Composite:{key}")
-    value = composite if composite not in (None, "") else raw.get(f"GPS:{key}")
+    value = composite
+    if value in (None, ""):
+        value = _first_present(raw, [f"EXIF:{key}", f"GPS:{key}", f"XMP:{key}"])
     if value in (None, ""):
         return "Not found"
     try:
         number = float(value)
     except (TypeError, ValueError):
         return str(value)
-    ref = str(raw.get(f"GPS:{ref_key}", "")).upper()
+    ref = str(_first_present(raw, [f"EXIF:{ref_key}", f"GPS:{ref_key}"]) or "").strip().upper()[:1]
     if ref in {"S", "W"} and number > 0:
         number = -number
     return f"{number:.8f}".rstrip("0").rstrip(".")
@@ -67,8 +83,8 @@ def timezone_status(raw: dict) -> tuple[str, str]:
     offset_digitized = get_any(raw, ["EXIF:OffsetTimeDigitized"])
     offset_general = get_any(raw, ["EXIF:OffsetTime"])
 
-    gps_date = get_any(raw, ["GPS:GPSDateStamp"])
-    gps_time = get_any(raw, ["GPS:GPSTimeStamp"])
+    gps_date = get_any(raw, GPS_DATE_KEYS)
+    gps_time = get_any(raw, GPS_TIME_KEYS)
 
     if offset_original != "Not found":
         return "Stored timezone offset found", f"OffsetTimeOriginal: {offset_original}"
@@ -113,8 +129,8 @@ def build_analysis(file_path: Path, raw: dict, exiftool_version: str) -> dict:
     }
 
     device_info = {
-        "Make": get_any(raw, ["EXIF:Make", "IFD0:Make", "QuickTime:Make"]),
-        "Model": get_any(raw, ["EXIF:Model", "IFD0:Model", "QuickTime:Model"]),
+        "Make": get_any(raw, ["EXIF:Make", "IFD0:Make", "XMP:Make", "QuickTime:Make"]),
+        "Model": get_any(raw, ["EXIF:Model", "IFD0:Model", "XMP:Model", "QuickTime:Model"]),
         "Lens model": get_any(raw, ["EXIF:LensModel", "Composite:LensID", "MakerNotes:LensModel"]),
         "Lens make": get_any(raw, ["EXIF:LensMake"]),
         "Serial number": get_any(raw, [
@@ -133,8 +149,8 @@ def build_analysis(file_path: Path, raw: dict, exiftool_version: str) -> dict:
         "Offset time original": get_any(raw, ["EXIF:OffsetTimeOriginal"]),
         "Offset time digitized": get_any(raw, ["EXIF:OffsetTimeDigitized"]),
         "Offset time": get_any(raw, ["EXIF:OffsetTime"]),
-        "GPS date stamp": get_any(raw, ["GPS:GPSDateStamp"]),
-        "GPS time stamp": get_any(raw, ["GPS:GPSTimeStamp"]),
+        "GPS date stamp": get_any(raw, GPS_DATE_KEYS),
+        "GPS time stamp": get_any(raw, GPS_TIME_KEYS),
         "Timezone status": tz_status,
         "Timezone explanation": tz_explanation,
     }
@@ -142,9 +158,9 @@ def build_analysis(file_path: Path, raw: dict, exiftool_version: str) -> dict:
     location_info = {
         "GPS latitude": gps_lat,
         "GPS longitude": gps_lon,
-        "GPS altitude": get_any(raw, ["GPS:GPSAltitude", "Composite:GPSAltitude"]),
-        "GPS speed": get_any(raw, ["GPS:GPSSpeed"]),
-        "GPS direction": get_any(raw, ["GPS:GPSImgDirection", "Composite:GPSImgDirection"]),
+        "GPS altitude": get_any(raw, ["Composite:GPSAltitude", "EXIF:GPSAltitude", "GPS:GPSAltitude", "XMP:GPSAltitude"]),
+        "GPS speed": get_any(raw, ["EXIF:GPSSpeed", "GPS:GPSSpeed"]),
+        "GPS direction": get_any(raw, ["EXIF:GPSImgDirection", "GPS:GPSImgDirection", "XMP:GPSImgDirection"]),
         "Map link text": gps_map_text(gps_lat, gps_lon),
         "Location note": "No online lookup is performed. Coordinates are displayed locally only.",
     }
@@ -163,27 +179,36 @@ def build_analysis(file_path: Path, raw: dict, exiftool_version: str) -> dict:
     }
 
     software_info = {
-        "Software": get_any(raw, ["EXIF:Software", "IFD0:Software"]),
+        "Software": get_any(raw, ["EXIF:Software", "IFD0:Software", "XMP:Software", "PNG:Software"]),
         "Creator tool": get_any(raw, ["XMP:CreatorTool"]),
         "Processing software": get_any(raw, ["EXIF:ProcessingSoftware"]),
         "History": get_any(raw, ["XMP:HistoryAction", "XMP:HistorySoftwareAgent"]),
-        "Artist": get_any(raw, ["EXIF:Artist", "IFD0:Artist", "XMP:Creator"]),
-        "Copyright": get_any(raw, ["EXIF:Copyright", "IFD0:Copyright", "XMP:Rights"]),
+        "Artist": get_any(raw, ["EXIF:Artist", "IFD0:Artist", "XMP:Creator", "IPTC:By-line"]),
+        "Copyright": get_any(raw, ["EXIF:Copyright", "IFD0:Copyright", "XMP:Rights", "IPTC:CopyrightNotice"]),
     }
 
     gps_found = gps_lat != "Not found" or gps_lon != "Not found"
-    time_found = has_any(raw, ["EXIF:DateTimeOriginal", "EXIF:CreateDate", "QuickTime:CreateDate", "XMP:CreateDate"])
+    time_found = has_any(raw, [
+        "EXIF:DateTimeOriginal", "EXIF:CreateDate", "QuickTime:CreateDate", "XMP:CreateDate", "XMP:DateCreated",
+    ])
     timezone_found = has_any(raw, ["EXIF:OffsetTimeOriginal", "EXIF:OffsetTimeDigitized", "EXIF:OffsetTime"])
-    gps_time_found = has_any(raw, ["GPS:GPSDateStamp", "GPS:GPSTimeStamp"])
-    device_found = has_any(raw, ["EXIF:Make", "EXIF:Model", "IFD0:Make", "IFD0:Model", "QuickTime:Model"])
+    gps_time_found = has_any(raw, GPS_DATE_KEYS + GPS_TIME_KEYS)
+    device_found = has_any(raw, [
+        "EXIF:Make", "EXIF:Model", "IFD0:Make", "IFD0:Model", "XMP:Make", "XMP:Model", "QuickTime:Model",
+    ])
     serial_found = has_any(raw, [
         "EXIF:SerialNumber",
         "MakerNotes:SerialNumber",
         "MakerNotes:CameraSerialNumber",
         "Composite:SerialNumber",
     ])
-    owner_found = has_any(raw, ["EXIF:Artist", "IFD0:Artist", "XMP:Creator", "XMP:Rights", "EXIF:Copyright"])
-    software_found = has_any(raw, ["EXIF:Software", "IFD0:Software", "XMP:CreatorTool"])
+    owner_found = has_any(raw, [
+        "EXIF:Artist", "IFD0:Artist", "XMP:Creator", "XMP:Rights", "EXIF:Copyright",
+        "IPTC:By-line", "IPTC:CopyrightNotice",
+    ])
+    software_found = has_any(raw, [
+        "EXIF:Software", "IFD0:Software", "XMP:Software", "PNG:Software", "XMP:CreatorTool",
+    ])
 
     risk_points = 0
     reasons = []

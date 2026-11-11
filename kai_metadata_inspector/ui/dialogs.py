@@ -15,6 +15,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from kai_metadata_inspector.core.metadata_writer import changed_fields
+
 
 class MetadataEditorDialog(QDialog):
     FIELDS = [
@@ -38,11 +40,15 @@ class MetadataEditorDialog(QDialog):
         self.setWindowTitle("Edit metadata — backup created before saving")
         self.resize(620, 620)
         layout = QVBoxLayout(self)
-        note = QLabel("This changes the selected file. Kai creates a recovery copy first.")
+        note = QLabel(
+            "This changes the selected file. Kai creates a recovery copy first.\n"
+            "Only fields you change are written. Clearing a field removes it from the file."
+        )
         note.setObjectName("WarningLabel")
         note.setWordWrap(True)
         layout.addWidget(note)
         form = QFormLayout()
+        self.initial = dict(initial)
         self.inputs: dict[str, QLineEdit] = {}
         for key, label in self.FIELDS:
             edit = QLineEdit(initial.get(key, ""))
@@ -58,6 +64,10 @@ class MetadataEditorDialog(QDialog):
         values: dict[str, Any] = {key: edit.text().strip() for key, edit in self.inputs.items()}
         values["keywords"] = [item.strip() for item in values["keywords"].split(",") if item.strip()]
         return values
+
+    def changes(self) -> dict[str, Any]:
+        """Only the fields the user actually edited."""
+        return changed_fields(self.initial, self.values())
 
 
 class CleaningComparisonDialog(QDialog):
@@ -81,6 +91,13 @@ class CleaningComparisonDialog(QDialog):
         )
         safety.setObjectName("SuccessLabel" if result.get("original_unchanged") else "WarningLabel")
         layout.addWidget(safety)
+
+        sensitive = result.get("sensitive_remaining") or []
+        if sensitive:
+            warning = QLabel("STILL PRESENT AFTER CLEANING — REVIEW BEFORE SHARING:\n• " + "\n• ".join(sensitive))
+            warning.setObjectName("WarningLabel")
+            warning.setWordWrap(True)
+            layout.addWidget(warning)
 
         columns = QHBoxLayout()
         removed = QPlainTextEdit()

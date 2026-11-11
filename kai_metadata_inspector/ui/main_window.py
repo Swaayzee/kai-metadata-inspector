@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 import json
-from io import BytesIO
 from pathlib import Path
 from typing import Any, Callable
 
-from PIL import Image, ImageOps
 from PySide6.QtCore import QRunnable, Qt, QThreadPool
-from PySide6.QtGui import QAction, QColor, QDesktopServices, QFont, QPixmap
+from PySide6.QtGui import QAction, QColor, QDesktopServices, QFont, QImage, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -41,19 +39,18 @@ from kai_metadata_inspector.core.folder_summary import (
     build_folder_summary_csv,
     find_supported_files,
 )
-from kai_metadata_inspector.core.metadata_writer import write_metadata_to_original
+from kai_metadata_inspector.core.metadata_writer import (
+    build_write_arguments,
+    current_field_values,
+    write_metadata_to_original,
+)
+from kai_metadata_inspector.core.preview import load_preview_image
 from kai_metadata_inspector.core.report_builder import build_report
 from kai_metadata_inspector.core.runtime import runtime_diagnostics
 from kai_metadata_inspector.ui.dialogs import CleaningComparisonDialog, MetadataEditorDialog
 from kai_metadata_inspector.ui.styles import APP_STYLESHEET
 from kai_metadata_inspector.ui.utils import display_value, json_safe, now_stamp
 from kai_metadata_inspector.ui.workers import CancellableWorker, TaskWorker
-
-try:
-    from pillow_heif import register_heif_opener
-    register_heif_opener()
-except Exception:
-    pass
 
 
 class MainWindow(QMainWindow):
@@ -336,16 +333,11 @@ class MainWindow(QMainWindow):
     def _load_preview(self, path: Path) -> None:
         self._preview = None
         try:
-            with Image.open(path) as image:
-                image = ImageOps.exif_transpose(image)
-                image.thumbnail((1600, 1200))
-                if image.mode not in ("RGB", "RGBA"):
-                    image = image.convert("RGB")
-                buffer = BytesIO()
-                image.save(buffer, "PNG")
-            pixmap = QPixmap()
-            if pixmap.loadFromData(buffer.getvalue(), "PNG"):
-                self._preview = pixmap
+            image = load_preview_image(path)
+            data = image.tobytes("raw", "RGBA")
+            qimage = QImage(data, image.width, image.height, image.width * 4, QImage.Format.Format_RGBA8888)
+            # copy() detaches the pixels from the temporary Python buffer.
+            self._preview = QPixmap.fromImage(qimage.copy())
         except Exception:
             pixmap = QPixmap(str(path))
             if not pixmap.isNull():
@@ -466,8 +458,12 @@ class MainWindow(QMainWindow):
             self._show_error(message)
 
     def _activate_folder_item(self, item: QListWidgetItem) -> None:
+        path = Path(item.data(Qt.ItemDataRole.UserRole))
+        # A click also fires "activated" on some platforms; do not inspect twice.
+        if path == self.current_path:
+            return
         self.load_file(
-            Path(item.data(Qt.ItemDataRole.UserRole)),
+            path,
             start_folder_scan=self._pending_folder_scan,
         )
 
@@ -513,27 +509,36 @@ class MainWindow(QMainWindow):
         if not self.current_path or not self.current_analysis:
             QMessageBox.information(self, APP_NAME, "Open and inspect a file first.")
             return
-        initial = {
-            "camera_make": self.current_analysis["device"]["Make"].replace("Not found", ""),
-            "camera_model": self.current_analysis["device"]["Model"].replace("Not found", ""),
-            "lens_make": self.current_analysis["device"]["Lens make"].replace("Not found", ""),
-            "lens_model": self.current_analysis["device"]["Lens model"].replace("Not found", ""),
-            "gps_latitude": self.current_analysis["flags"]["gps_latitude"].replace("Not found", ""),
-            "gps_longitude": self.current_analysis["flags"]["gps_longitude"].replace("Not found", ""),
-            "gps_altitude": "", "date_taken": self.current_analysis["time"]["Date/time original"].replace("Not found", ""),
-        }
-        dialog = MetadataEditorDialog(initial, self)
+        dialog = MetadataEditorDialog(current_field_values(self.current_raw), self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
-        values = dialog.values()
-        if not any(values.values()):
+        changes = dialog.changes()
+        if not changes:
+            self.statusBar().showMessage("No fields were changed — file not modified")
+            return
+        try:
+            build_write_arguments(changes)
+        except RuntimeError as exc:
+            QMessageBox.warning(self, "Invalid value", f"{exc}\n\nThe file was not modified.")
             return
         path = self.current_path
-        self._run(lambda: write_metadata_to_original(path, values), self._edit_ready, "Writing metadata with recovery backup…")
+        self._run(lambda: write_metadata_to_original(path, changes), self._edit_ready, "Writing metadata with recovery backup…")
 
     def _edit_ready(self, result: dict[str, Any]) -> None:
-        self.statusBar().showMessage("Metadata saved; recovery backup created")
-        QMessageBox.information(self, "Metadata saved", f"File updated.\n\nRecovery backup:\n{result['backup_path']}")
+        unverified = result.get("unverified_fields", [])
+        if unverified:
+            self.statusBar().showMessage("Metadata saved, but some fields could not be verified")
+            QMessageBox.warning(
+                self, "Saved with warnings",
+                "The file was updated, but these fields did not read back as entered "
+                "(this file type may not support them):\n• " + "\n• ".join(unverified)
+                + f"\n\nRecovery backup:\n{result['backup_path']}",
+            )
+        else:
+            self.statusBar().showMessage(
+                f"Metadata saved and verified — {len(result.get('changed_fields', []))} field(s) changed"
+            )
+            QMessageBox.information(self, "Metadata saved", f"File updated.\n\nRecovery backup:\n{result['backup_path']}")
         if self.current_path:
             self.load_file(self.current_path)
 
@@ -560,17 +565,23 @@ class MainWindow(QMainWindow):
         selected, _ = QFileDialog.getSaveFileName(self, "Export", str(outputs_dir() / filename), file_filter)
         return Path(selected) if selected else None
 
+    def _write_export(self, destination: Path, text: str, encoding: str = "utf-8") -> None:
+        try:
+            destination.write_text(text, encoding=encoding)
+        except OSError as exc:
+            self._show_error(f"Could not save {destination}:\n{exc}")
+            return
+        self.statusBar().showMessage(f"Exported {destination}")
+
     def _export_text(self) -> None:
         destination = self._choose_export(f"{self.current_path.stem}_metadata_{now_stamp()}.txt", "Text (*.txt)")
         if destination:
-            destination.write_text(build_report(self.current_path, self.current_analysis), encoding="utf-8")
-            self.statusBar().showMessage(f"Exported {destination}")
+            self._write_export(destination, build_report(self.current_path, self.current_analysis))
 
     def _export_json(self) -> None:
         destination = self._choose_export(f"{self.current_path.stem}_metadata_{now_stamp()}.json", "JSON (*.json)")
         if destination:
-            destination.write_text(json.dumps(json_safe(self.current_raw), indent=2, ensure_ascii=False), encoding="utf-8")
-            self.statusBar().showMessage(f"Exported {destination}")
+            self._write_export(destination, json.dumps(json_safe(self.current_raw), indent=2, ensure_ascii=False))
 
     def _export_folder_csv(self) -> None:
         if not self.folder_summary:
@@ -578,8 +589,7 @@ class MainWindow(QMainWindow):
             return
         destination = self._choose_export(f"folder_summary_{now_stamp()}.csv", "CSV (*.csv)")
         if destination:
-            destination.write_text(build_folder_summary_csv(self.folder_summary), encoding="utf-8-sig")
-            self.statusBar().showMessage(f"Exported {destination}")
+            self._write_export(destination, build_folder_summary_csv(self.folder_summary), encoding="utf-8-sig")
 
     def open_outputs(self) -> None:
         QDesktopServices.openUrl(outputs_dir().as_uri())
@@ -593,6 +603,13 @@ class MainWindow(QMainWindow):
             self, f"About {APP_NAME}",
             f"{APP_NAME} {APP_VERSION}\n\nOffline metadata inspection, privacy analysis, verified cleaning, and careful editing.\n\nNo telemetry. No uploads."
         )
+
+    def closeEvent(self, event: Any) -> None:
+        # Stop a running folder scan so the app can exit promptly instead of
+        # finishing the whole scan after the window is gone.
+        self.cancel_folder_scan()
+        self.thread_pool.waitForDone(5000)
+        super().closeEvent(event)
 
     def dragEnterEvent(self, event: Any) -> None:
         if event.mimeData().hasUrls():

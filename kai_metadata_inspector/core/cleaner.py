@@ -1,10 +1,48 @@
 import hashlib
+import os
 import shutil
 from datetime import datetime
 from pathlib import Path
 
+from kai_metadata_inspector.core.analyzer import build_analysis
 from kai_metadata_inspector.core.exiftool_runner import safe_run_exiftool
 from kai_metadata_inspector.core.runtime import run_exiftool
+
+# "-all=" alone is not enough:
+# - it cannot delete IFD0 of TIFF-based files, which is where make, model,
+#   artist, software and dates live. "-CommonIFD0=" and the explicit IFD0
+#   tags remove those.
+# - it also deletes the orientation tag and the colour profile, so phone
+#   photos come out rotated and colours shift. Neither identifies a person
+#   or device, so both are kept.
+CLEAN_ARGUMENTS = [
+    "-all=",
+    "-CommonIFD0=",
+    "-IFD0:HostComputer=",
+    "-IFD0:DocumentName=",
+    "-IFD0:PageName=",
+    "-IFD0:XPTitle=",
+    "-IFD0:XPComment=",
+    "-IFD0:XPAuthor=",
+    "-IFD0:XPKeywords=",
+    "-IFD0:XPSubject=",
+    "--icc_profile:all",
+    "-tagsfromfile", "@",
+    "-orientation",
+    "-overwrite_original",
+]
+
+# Analysis flag -> label shown when it is still set after cleaning.
+SENSITIVE_FLAGS = {
+    "gps_found": "GPS coordinates",
+    "time_found": "Capture/creation timestamp",
+    "timezone_found": "Timezone offset",
+    "gps_time_found": "GPS timestamp",
+    "device_found": "Camera/phone make or model",
+    "serial_found": "Device serial number",
+    "owner_found": "Owner/creator/copyright",
+    "software_found": "Software/editing tool",
+}
 
 
 def sha256_file(file_path: Path) -> str:
@@ -33,7 +71,8 @@ def clean_metadata_copy(source_path: Path, output_path: Path) -> dict:
     - Original file is never modified.
     - Output file must not already exist.
     - Output path cannot be the same as source path.
-    - ExifTool is run only against the output copy.
+    - ExifTool is run only against a temporary copy.
+    - Image data is not re-encoded; orientation and colour profile are kept.
     - No shell=True.
     - No internet access.
     """
@@ -53,55 +92,44 @@ def clean_metadata_copy(source_path: Path, output_path: Path) -> dict:
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     original_hash_before = sha256_file(source_path)
+    before_raw = safe_run_exiftool(source_path)
 
-    # Copy bytes only. Do not preserve original filesystem timestamps.
-    shutil.copyfile(source_path, output_path)
-
-    arguments = [
-        "-all=",
-        "-overwrite_original",
-        "--",
-        str(output_path),
-    ]
+    # Work on a hidden temporary copy and move it into place only after
+    # cleaning succeeded, so a failed run can never leave an uncleaned file
+    # under the name the user chose for the cleaned copy.
+    temp_path = output_path.with_name(f".{output_path.stem}.kai-tmp{output_path.suffix}")
 
     try:
-        result = run_exiftool(arguments)
-    except RuntimeError:
-        try:
-            output_path.unlink(missing_ok=True)
-        except Exception:
-            pass
+        # Copy bytes only. Do not preserve original filesystem timestamps.
+        shutil.copyfile(source_path, temp_path)
 
-        raise RuntimeError(
-            "ExifTool could not finish cleaning the copy."
-        )
+        result = run_exiftool([*CLEAN_ARGUMENTS, "--", str(temp_path)])
 
-    if result.returncode != 0:
-        try:
-            output_path.unlink(missing_ok=True)
-        except Exception:
-            pass
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr.strip() or "Unknown ExifTool cleaning error.")
 
-        error_text = result.stderr.strip() or "Unknown ExifTool cleaning error."
-        raise RuntimeError(error_text)
+        original_hash_after = sha256_file(source_path)
 
-    original_hash_after = sha256_file(source_path)
-    cleaned_hash = sha256_file(output_path)
+        if original_hash_before != original_hash_after:
+            raise RuntimeError(
+                "Safety check failed: original file hash changed. "
+                "This should never happen. No cleaned copy was kept."
+            )
 
-    if original_hash_before != original_hash_after:
-        raise RuntimeError(
-            "Safety check failed: original file hash changed. "
-            "This should never happen. Stop using this cleaned output and review manually."
-        )
-
-    before_raw = safe_run_exiftool(source_path)
-    after_raw = safe_run_exiftool(output_path)
+        after_raw = safe_run_exiftool(temp_path)
+        cleaned_hash = sha256_file(temp_path)
+        os.replace(temp_path, output_path)
+    finally:
+        temp_path.unlink(missing_ok=True)
 
     before_keys = set(before_raw.keys())
     after_keys = set(after_raw.keys())
 
     removed_keys = sorted(before_keys - after_keys)
     remaining_keys = sorted(after_keys)
+
+    flags = build_analysis(output_path, after_raw, "")["flags"]
+    sensitive_remaining = [label for flag, label in SENSITIVE_FLAGS.items() if flags[flag]]
 
     report = build_cleaning_report(
         source_path=source_path,
@@ -113,6 +141,7 @@ def clean_metadata_copy(source_path: Path, output_path: Path) -> dict:
         after_count=len(after_keys),
         removed_keys=removed_keys,
         remaining_keys=remaining_keys,
+        sensitive_remaining=sensitive_remaining,
         exiftool_stdout=result.stdout.strip(),
         exiftool_stderr=result.stderr.strip(),
     )
@@ -133,6 +162,7 @@ def clean_metadata_copy(source_path: Path, output_path: Path) -> dict:
         "original_unchanged": original_hash_before == original_hash_after,
         "removed_keys": removed_keys,
         "remaining_keys": remaining_keys,
+        "sensitive_remaining": sensitive_remaining,
     }
 
 
@@ -148,6 +178,7 @@ def build_cleaning_report(
     remaining_keys: list[str],
     exiftool_stdout: str,
     exiftool_stderr: str,
+    sensitive_remaining: list[str] | None = None,
 ) -> str:
     lines = []
 
@@ -162,6 +193,8 @@ def build_cleaning_report(
     lines.append("-----------")
     lines.append("The original file was not modified.")
     lines.append("ExifTool was run only against the cleaned copy.")
+    lines.append("Image data was not re-encoded. The orientation tag and colour profile are kept")
+    lines.append("so the image still displays correctly.")
     lines.append("A SHA256 check was used to confirm the original file hash did not change.")
     lines.append("")
     lines.append("HASH CHECK")
@@ -189,6 +222,13 @@ def build_cleaning_report(
     lines.append(f"Metadata tags before cleaning: {before_count}")
     lines.append(f"Metadata tags after cleaning: {after_count}")
     lines.append(f"Removed tag count: {len(removed_keys)}")
+    lines.append("")
+    lines.append("Sensitive Metadata Still Present")
+    lines.append("--------------------------------")
+    if sensitive_remaining:
+        lines.extend(sensitive_remaining)
+    else:
+        lines.append("None detected.")
     lines.append("")
     lines.append("Removed Tags")
     lines.append("------------")

@@ -15,8 +15,8 @@ Version 2.0 replaces the Linux-alpha internals with one ExifTool-backed inspecti
 - Previews common images, including HEIC/HEIF when supported
 - Scans folders in a background worker with visible progress and cooperative cancellation
 - Exports full TXT reports, raw JSON, and folder CSV summaries
-- Creates a cleaned copy, verifies the original SHA-256 hash, and shows a before/after tag comparison
-- Edits selected fields only after creating a recovery backup
+- Creates a lossless cleaned copy, verifies the original SHA-256 hash, shows a before/after tag comparison, and warns if anything sensitive is left
+- Edits only the fields you change (clearing a field removes it), after creating a recovery backup, and verifies the result
 - Uses no telemetry, analytics, cloud services, or automatic network requests
 
 ## Platforms
@@ -63,12 +63,26 @@ Diagnostics show exactly which ExifTool executable is used and its version.
 ## Safety model
 
 - Inspection is read-only.
-- Cleaning copies bytes to a new destination, removes metadata from the copy only, and compares the original hash before and after.
-- Editing changes the selected file, but first stores a timestamped recovery copy in the app data directory.
+- Cleaning copies bytes to a new destination, removes metadata from the copy only, and compares the original hash before and after. Image data is not re-encoded; the orientation tag and colour profile are kept so the picture still displays correctly.
+- Editing changes the selected file, but first validates every value and stores a timestamped recovery copy in the app data directory. Only changed fields are written, and the copy is restored if the write fails.
+- Recovery copies stay in `backups/` until you delete them, and they contain the original metadata.
 - ExifTool is always called with an argument list, never through a shell.
 - Exported reports can themselves contain private metadata. Review them before sharing.
 
 No metadata tool can promise removal of every proprietary field from every format. Re-open and inspect the cleaned output before publishing it.
+
+## Format support
+
+Verified by the automated tests with generated images (Linux, ExifTool 12.76):
+
+| Format | Inspect | Preview | Clean copy | Edit |
+|---|---|---|---|---|
+| JPEG, PNG, WebP, TIFF, HEIC/HEIF | yes | yes | yes | yes |
+| GIF | yes | yes | yes | not tested |
+| BMP | yes | yes | no — ExifTool cannot write BMP | no |
+
+AVIF, DNG, PSD, XMP sidecars and camera RAW files can be opened and inspected, but are
+not covered by automated tests; RAW files have no preview. Work on copies.
 
 ## Output locations
 

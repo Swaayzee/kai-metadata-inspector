@@ -4,7 +4,11 @@ from typing import Callable
 
 from kai_metadata_inspector.config import APP_VERSION, SUPPORTED_EXTENSIONS
 from kai_metadata_inspector.core.analyzer import build_analysis
-from kai_metadata_inspector.core.exiftool_runner import safe_run_exiftool
+from kai_metadata_inspector.core.exiftool_runner import read_metadata_batch
+
+# Files read by one ExifTool process during a folder scan. Cancelling takes
+# effect before the next file is counted, at most one batch read later.
+FOLDER_BATCH_SIZE = 25
 
 
 def find_supported_files(folder_path: Path) -> list[Path]:
@@ -41,7 +45,7 @@ def build_folder_summary(
     - read-only
     - no internet
     - no file modification
-    - each file uses safe ExifTool subprocess call
+    - files are read in batches: one ExifTool process per FOLDER_BATCH_SIZE files
     """
 
     summary = {
@@ -69,12 +73,17 @@ def build_folder_summary(
     }
 
     total = len(files)
+    batch: dict = {}
     for index, file_path in enumerate(files, start=1):
         if should_cancel and should_cancel():
             summary["cancelled"] = True
             break
+        if file_path not in batch:
+            batch = read_metadata_batch(files[index - 1:index - 1 + FOLDER_BATCH_SIZE])
         try:
-            raw = safe_run_exiftool(file_path)
+            raw = batch[file_path]
+            if isinstance(raw, str):
+                raise RuntimeError(raw)
             analysis = build_analysis(file_path, raw, exiftool_version)
             flags = analysis["flags"]
 
