@@ -10,7 +10,7 @@ from kai_metadata_inspector.ui.workers import TaskWorker
 def test_window_constructs() -> None:
     _app = QApplication.instance() or QApplication([])
     window = MainWindow()
-    assert window.windowTitle() == "Kai Metadata Inspector 2.0.0"
+    assert window.windowTitle() == "Kai Metadata Inspector 2.1.0"
     assert window.table.columnCount() == 3
     assert window.progress_bar.isHidden()
     window.close()
