@@ -49,8 +49,8 @@ if sys.platform == "darwin":
         name="Kai Metadata Inspector.app",
         bundle_identifier="com.kai.metadata-inspector",
         info_plist={
-            "CFBundleShortVersionString": "2.0.0",
-            "CFBundleVersion": "2.0.0",
+            "CFBundleShortVersionString": "2.1.0",
+            "CFBundleVersion": "2.1.0",
             "NSHighResolutionCapable": True,
             "CFBundleDocumentTypes": [{
                 "CFBundleTypeName": "Image",
