@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kai-metadata-inspector"
-version = "2.1.0"
+version = "2.1.1"
 description = "Offline, privacy-focused image metadata inspector and cleaner"
 requires-python = ">=3.11"
 dependencies = [

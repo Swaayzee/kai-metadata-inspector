@@ -5,7 +5,7 @@ import platform
 from pathlib import Path
 
 APP_NAME = "Kai Metadata Inspector"
-APP_VERSION = "2.1.0"
+APP_VERSION = "2.1.1"
 APP_ID = "com.kai.metadata-inspector"
 MAX_FILE_SIZE_MB_WARNING = 250
 MAX_PREVIEW_FILE_SIZE_MB = 80

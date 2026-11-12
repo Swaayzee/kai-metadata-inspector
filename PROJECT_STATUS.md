@@ -2,7 +2,7 @@
 
 ## Current release candidate
 
-**Kai Metadata Inspector 2.1.0** (unreleased; see [CHANGELOG.md](CHANGELOG.md))
+**Kai Metadata Inspector 2.1.1** (unreleased; see [CHANGELOG.md](CHANGELOG.md))
 
 The source refactor and local Linux verification are complete. Windows x64, macOS Intel, macOS Apple Silicon, and Linux x86_64 AppImage workflows are ready for native CI validation.
 
