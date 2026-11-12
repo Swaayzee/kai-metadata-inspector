@@ -139,3 +139,14 @@ def test_clean_never_touches_files_it_did_not_create(tmp_path: Path) -> None:
         "other.jpg", "other_cleaning_report.txt",
         "photo.jpg", "photo_cleaning_report.txt",
     ]
+
+
+def test_clean_accepts_long_output_names(tmp_path: Path, rich_jpg: Path) -> None:
+    """Regression: the temporary name included the whole output stem plus a
+    UUID, which exceeded the 255-byte file name limit for long output names."""
+    output = tmp_path / ("a" * 220 + ".jpg")
+    clean_metadata_copy(rich_jpg, output)
+    assert "EXIF:Make" not in safe_run_exiftool(output)
+    assert sorted(p.name for p in tmp_path.iterdir() if p.name.startswith("a")) == [
+        "a" * 220 + ".jpg", "a" * 220 + "_cleaning_report.txt",
+    ]

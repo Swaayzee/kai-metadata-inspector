@@ -72,7 +72,8 @@ def _create_temp_file(output_path: Path) -> Path:
     Only a file created here is ever overwritten or removed by cleaning.
     """
     while True:
-        candidate = output_path.with_name(f".{output_path.stem}.{uuid.uuid4().hex}.kai-tmp{output_path.suffix}")
+        # A fixed prefix keeps the name short however long the output name is.
+        candidate = output_path.with_name(f".kai-tmp-{uuid.uuid4().hex}{output_path.suffix}")
         try:
             candidate.open("xb").close()
         except FileExistsError:
