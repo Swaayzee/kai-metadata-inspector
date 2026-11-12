@@ -1,6 +1,7 @@
 import hashlib
 import os
 import shutil
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -63,6 +64,22 @@ def sha256_file(file_path: Path) -> str:
     return hasher.hexdigest()
 
 
+def _create_temp_file(output_path: Path) -> Path:
+    """Exclusively create a new, uniquely named file next to ``output_path``.
+
+    The name is random and the file is created with "x" mode, so this can
+    never be an existing file (the source, or anything else in the folder).
+    Only a file created here is ever overwritten or removed by cleaning.
+    """
+    while True:
+        candidate = output_path.with_name(f".{output_path.stem}.{uuid.uuid4().hex}.kai-tmp{output_path.suffix}")
+        try:
+            candidate.open("xb").close()
+        except FileExistsError:
+            continue
+        return candidate
+
+
 def clean_metadata_copy(source_path: Path, output_path: Path) -> dict:
     """
     Creates a cleaned copy of a file.
@@ -97,7 +114,7 @@ def clean_metadata_copy(source_path: Path, output_path: Path) -> dict:
     # Work on a hidden temporary copy and move it into place only after
     # cleaning succeeded, so a failed run can never leave an uncleaned file
     # under the name the user chose for the cleaned copy.
-    temp_path = output_path.with_name(f".{output_path.stem}.kai-tmp{output_path.suffix}")
+    temp_path = _create_temp_file(output_path)
 
     try:
         # Copy bytes only. Do not preserve original filesystem timestamps.

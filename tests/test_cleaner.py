@@ -112,3 +112,30 @@ def test_failed_clean_leaves_nothing_behind(tmp_path: Path, kind: str) -> None:
 def test_clean_missing_source(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         clean_metadata_copy(tmp_path / "nope.jpg", tmp_path / "out.jpg")
+
+
+def test_clean_never_touches_files_it_did_not_create(tmp_path: Path) -> None:
+    """Regression: the temporary name was derived from the output name. If
+    that name already existed it was overwritten and deleted; when it was the
+    source itself (".photo.kai-tmp.jpg" cleaned to "photo.jpg"), the original
+    was deleted."""
+    source = make_image(tmp_path / ".photo.kai-tmp.jpg")
+    exiftool_write(source, "-Make=TestMake")
+    before = source.read_bytes()
+
+    output = tmp_path / "photo.jpg"
+    clean_metadata_copy(source, output)
+
+    assert source.read_bytes() == before, "the original must survive"
+    assert "EXIF:Make" not in safe_run_exiftool(output)
+
+    # An unrelated file that happens to use the old temporary naming scheme.
+    bystander = tmp_path / ".other.kai-tmp.jpg"
+    bystander.write_bytes(b"keep me")
+    clean_metadata_copy(source, tmp_path / "other.jpg")
+    assert bystander.read_bytes() == b"keep me"
+    assert sorted(p.name for p in tmp_path.iterdir()) == [
+        ".other.kai-tmp.jpg", ".photo.kai-tmp.jpg",
+        "other.jpg", "other_cleaning_report.txt",
+        "photo.jpg", "photo_cleaning_report.txt",
+    ]

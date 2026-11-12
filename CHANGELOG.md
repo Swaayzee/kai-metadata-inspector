@@ -1,6 +1,16 @@
 # Changelog
 
-## 2.1.0 — unreleased
+## 2.1.1 — unreleased
+
+### Fixed
+
+- **Creating a clean copy could delete a file it did not create.** The temporary file
+  name was derived from the output name; if a file with that name already existed it was
+  overwritten and removed, and when it was the source itself (`.photo.kai-tmp.jpg` cleaned
+  to `photo.jpg`) the original was deleted. The temporary file is now created exclusively
+  with a unique random name. Found by the Codex review of #14.
+
+## 2.1.0
 
 A correctness and data-safety release found by a full audit of 2.0. Every fix below has
 a regression test; the suite grew from 10 to 87 tests.
