@@ -23,4 +23,5 @@ jobs:
       - run: python -m pytest -q
         env:
           QT_QPA_PLATFORM: offscreen
+          KAI_REQUIRE_EXIFTOOL: "1"
       - run: python app.py --diagnostics
