@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from kai_metadata_inspector.config import EXIFTOOL_TIMEOUT_SECONDS
@@ -31,6 +32,17 @@ def safe_run_exiftool(file_path: Path) -> dict:
     return payload[0]
 
 
+def source_key(name: str, *, windows: bool | None = None) -> str:
+    """Comparable form of a path as given to, or reported by, ExifTool.
+
+    On Windows ExifTool reports ``SourceFile`` with forward slashes whatever
+    was passed in, and paths are case-insensitive.
+    """
+    if os.name == "nt" if windows is None else windows:
+        return name.replace("\\", "/").casefold()
+    return name
+
+
 def read_metadata_batch(file_paths: list[Path]) -> dict[Path, dict | str]:
     """Read several files with a single ExifTool process.
 
@@ -41,17 +53,17 @@ def read_metadata_batch(file_paths: list[Path]) -> dict[Path, dict | str]:
     paths = [Path(path) for path in file_paths]
     if not paths:
         return {}
-    absolute = {path: str(path.absolute()) for path in paths}
+    absolute = {path: os.path.abspath(path) for path in paths}
     timeout = EXIFTOOL_TIMEOUT_SECONDS + 2 * len(paths)
     try:
         result = run_exiftool([*READ_ARGUMENTS, "--", *absolute.values()], timeout=timeout)
-        entries = {entry.get("SourceFile"): entry for entry in _parse_json(result.stdout)}
+        entries = {source_key(str(entry.get("SourceFile"))): entry for entry in _parse_json(result.stdout)}
     except RuntimeError as exc:
         return {path: str(exc) for path in paths}
 
     found: dict[Path, dict | str] = {}
     for path, name in absolute.items():
-        entry = entries.get(name)
+        entry = entries.get(source_key(name))
         if entry is None:
             found[path] = "ExifTool could not read this file."
         elif entry.get("ExifTool:Error"):

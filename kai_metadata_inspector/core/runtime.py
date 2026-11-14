@@ -51,11 +51,48 @@ def exiftool_command(arguments: Sequence[str]) -> list[str]:
     return [str(executable), *arguments]
 
 
+def use_argument_file() -> bool:
+    """Whether arguments are sent to ExifTool on stdin instead of the command line.
+
+    Windows passes command-line arguments in the ANSI code page, which corrupts
+    non-ASCII metadata values and file paths. ExifTool reads an argument file
+    as UTF-8, so on Windows arguments always go through "-@ -".
+    ``KAI_EXIFTOOL_ARGFILE=1`` forces this elsewhere so it can be tested.
+    """
+    override = os.environ.get("KAI_EXIFTOOL_ARGFILE")
+    if override is not None:
+        return override == "1"
+    return os.name == "nt"
+
+
+def build_argument_file(arguments: Sequence[str]) -> str | None:
+    """Arguments as ExifTool argument-file text, or None if not representable.
+
+    One argument per line. Paths (everything after "--") are made absolute:
+    an argument file ignores lines starting with "#" and strips leading
+    spaces, which an absolute path can never trigger.
+    """
+    if any("\n" in argument or "\r" in argument for argument in arguments):
+        return None
+    lines = ["-charset", "filename=UTF8"]
+    paths = False
+    for argument in arguments:
+        if paths:
+            argument = os.path.abspath(argument)
+        elif argument == "--":
+            paths = True
+        lines.append(argument)
+    return "\n".join(lines) + "\n"
+
+
 def run_exiftool(arguments: Sequence[str], *, timeout: int = EXIFTOOL_TIMEOUT_SECONDS) -> subprocess.CompletedProcess[str]:
+    argument_file = build_argument_file(arguments) if use_argument_file() else None
+    command = exiftool_command(["-@", "-"] if argument_file is not None else arguments)
     try:
         return subprocess.run(
-            exiftool_command(arguments), capture_output=True, text=True,
+            command, input=argument_file, capture_output=True, text=True,
             encoding="utf-8", errors="replace", timeout=timeout, check=False,
+            stdin=None if argument_file is not None else subprocess.DEVNULL,
         )
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(f"ExifTool timed out after {timeout} seconds.") from exc

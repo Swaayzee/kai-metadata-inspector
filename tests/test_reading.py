@@ -177,3 +177,12 @@ def test_folder_scan_spans_several_batches(tmp_path: Path, monkeypatch) -> None:
     summary, _report = build_folder_summary(folder, find_supported_files(folder), "test")
     assert summary["scanned_ok"] == 5
     assert [row["file"] for row in summary["file_rows"]] == [f"img{i}.png" for i in range(5)]
+
+
+def test_batch_matches_windows_style_source_files() -> None:
+    """Regression: on Windows ExifTool reports SourceFile with forward
+    slashes, so no file matched and every folder scan came back empty."""
+    from kai_metadata_inspector.core.exiftool_runner import source_key
+
+    assert source_key(r"C:\Users\Me\Pictures\a.JPG", windows=True) == source_key("C:/Users/Me/Pictures/a.jpg", windows=True)
+    assert source_key("/home/me/A.jpg", windows=False) != source_key("/home/me/a.jpg", windows=False)
