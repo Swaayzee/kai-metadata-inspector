@@ -29,8 +29,13 @@ def test_argument_file_makes_paths_absolute_and_keeps_values_literal() -> None:
     assert build_argument_file(["-XMP-dc:Description=two\nlines"]) is None
 
 
+# "0" is plain command-line arguments. On Windows that mode is the bug being
+# guarded against (the app never uses it there), so only "1" is run.
+ARGUMENT_MODES = ["1"] if os.name == "nt" else ["0", "1"]
+
+
 @needs_exiftool
-@pytest.mark.parametrize("argfile", ["0", "1"])
+@pytest.mark.parametrize("argfile", ARGUMENT_MODES)
 def test_non_ascii_values_and_awkward_file_names(tmp_path: Path, monkeypatch, argfile: str) -> None:
     """Regression (Windows): metadata values were passed on the command line
     in the ANSI code page, corrupting text such as "Zoë" and "©". With the
