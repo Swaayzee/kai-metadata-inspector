@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -141,6 +142,7 @@ def test_clean_never_touches_files_it_did_not_create(tmp_path: Path) -> None:
     ]
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows limits the whole path, not one name, to about 260 characters")
 def test_clean_accepts_long_output_names(tmp_path: Path, rich_jpg: Path) -> None:
     """Regression: the temporary name included the whole output stem plus a
     UUID, which exceeded the 255-byte file name limit for long output names."""

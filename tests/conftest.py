@@ -16,6 +16,11 @@ from kai_metadata_inspector.core.runtime import run_exiftool, runtime_diagnostic
 HAS_EXIFTOOL = runtime_diagnostics()["status"] == "ok"
 needs_exiftool = pytest.mark.skipif(not HAS_EXIFTOOL, reason="ExifTool is not installed")
 
+# CI sets this so a missing ExifTool fails the run instead of quietly
+# skipping most of the suite.
+if os.environ.get("KAI_REQUIRE_EXIFTOOL") and not HAS_EXIFTOOL:
+    raise pytest.UsageError(f"KAI_REQUIRE_EXIFTOOL is set but ExifTool is unavailable: {runtime_diagnostics()['status']}")
+
 RICH_TAGS = [
     "-Make=TestMake",
     "-Model=TestModel X1",

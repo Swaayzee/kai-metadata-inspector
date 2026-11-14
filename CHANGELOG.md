@@ -9,6 +9,18 @@
   overwritten and removed, and when it was the source itself (`.photo.kai-tmp.jpg` cleaned
   to `photo.jpg`) the original was deleted. The temporary file is now created exclusively
   with a unique random name. Found by the Codex review of #14.
+- **Windows: folder scans found no metadata.** ExifTool reports file paths with forward
+  slashes on Windows, so batched results never matched the files that were asked for and
+  every file was reported as unreadable.
+- **Windows: non-ASCII text was corrupted when editing metadata** (for example "Zoë" or
+  "©"), and paths with such characters could fail. Windows passes command-line arguments
+  in the ANSI code page; arguments are now sent to ExifTool as UTF-8 on standard input.
+
+### Changed
+
+- CI now runs the full test suite on Windows, macOS and in the AppImage job, using the
+  bundled ExifTool. Previously the ExifTool-dependent tests were skipped there, which is
+  why the two Windows bugs above went unnoticed.
 
 ## 2.1.0
 
